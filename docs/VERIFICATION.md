@@ -1,6 +1,51 @@
 # Verification record
 
-## Current verification: first-moment layout and cheap-model schema fix
+> **Archive note.** The saved archive records named in the sections below (the live proof runs, “A continent of possibilities”, the three-model runs, and the earlier sandbox records) were deleted from the local database at the owner's request. Their results are kept here as history only; they can no longer be opened in History. The local database now holds only the labelled sample, *The fragile peace*.
+
+## Current verification: watch-session remediation
+
+Final review follow-up (November 11, 2026): the independent Opus recheck confirmed all 14 original findings resolved and reproduced the full suite (83 browser tests passed, 3 optional captures skipped; 69 TypeScript and 10 Python tests passed). Its one new low-severity overlapping-start defect was subsequently fixed by the parent agent. After that fix, lint, type checking, the 69 TypeScript and 10 Python tests, and the production build passed again. Both new overlapping-start browser regressions and the strengthened delayed-response Pause test passed three times each (9/9). These focused final checks used a fresh temporary store and a blank provider key; the full browser suite was not rerun after the small final fix. See [the recheck and follow-up](review/recheck.md).
+
+Run on the local macOS machine against an isolated build (port 3012, a fresh temporary database, `OPENROUTER_API_KEY` set to an empty string). No paid model call was made for this work, and no claim of paid validation is made. Nothing was pushed, deployed, or committed, and the parent's servers on 3001 and 5173 were not touched.
+
+This round fixes the findings of the independent review (`docs/review/independent-review.md`). The mapping from each finding to its fix and its regression test is in [`docs/review/remediation.md`](review/remediation.md).
+
+### What changed
+
+- **One watch session, with identity.** `src/watch/useWatch.ts` owns every run request. A session has a token; ending it invalidates the token, and showing any game ends the previous session first. Late responses, polls, and timers can no longer continue or restart a session.
+- **Pause always wins.** Run and pause requests carry a shared ticket (`server/simulation.ts`, `server/index.ts`). A pause that reaches the server first cancels the late run; a pause after it stops the job between model calls, and is re-sent when the run's response arrives. The UI shows *Pausing…* until the server is idle.
+- **Central stop.** Every dialog, every tab other than Watch, a hidden page, seeking, the guided toggle, closing the guide, and switching games call one function that ends the session and the free replay timer. Nothing resumes on its own.
+- **Guided live play.** Each phase that resolves during a guided watch opens its walkthrough and holds the next phase until **Continue watching**; the final phase offers **See the result**. The status line puts *Reading* before *Playing*.
+- **Replay for every record.** Sample, sandbox, and live records replay from any moment, guided or timed, with no run request. **Resume at latest** is separate and labelled.
+- **Setup dismissal.** Closing Setup during a start cancels whatever has not happened, and pauses a run already sent.
+- **Errors.** Request failures and lost connections are shown for the game on screen, stop automatic play, and clear on Resume.
+- **Mobile guide.** A bottom sheet fixed to the viewport, with the map scrolled above it; the status line wraps at 390px.
+- **Test server.** Runs with a blank key; tests fake the catalog where the live setup is needed.
+
+### Automated checks
+
+| Check | Result |
+|---|---|
+| `pnpm lint` (`eslint .` and `ruff check engine`) | Exit 0 |
+| `pnpm typecheck` (`tsc -b`) | Exit 0 |
+| `pnpm test`: `tsx --test tests/*.test.ts` | 69 of 69 pass (including the new `tests/watch.test.ts` and ticket tests in `tests/simulation.test.ts`) |
+| `pnpm test`: `pytest engine` | 10 of 10 pass |
+| `pnpm build` | Exit 0 |
+| `OPENROUTER_API_KEY= pnpm test:browser` | 83 passed, 3 documentation captures skipped (run separately with `CAPTURE_SCREENSHOTS=1`, 3 of 3 pass) |
+| Timing-sensitive race tests, `--repeat-each=3` | 42 of 42 pass |
+| Documentation captures (`CAPTURE_SCREENSHOTS=1`) | Regenerated and inspected |
+
+### Visual checks
+
+Regenerated and inspected: `docs/guided-desktop.png`, `docs/guided-mobile.png` (opened from the footer after scrolling to the bottom: the sheet is on screen with Brest visible above it), `docs/guided-watch-desktop.png` and `docs/guided-watch-mobile.png` (a guided watch holding its first phase, with *Continue watching*), `docs/setup-*.png`, `docs/history-*.png`, `docs/desktop.png`, and `docs/mobile.png`. The layout spec measures the card at 390×844, 1280×800, and 1536×1024 at the real scroll position.
+
+### Remaining limits
+
+See [`docs/review/remediation.md`](review/remediation.md#remaining-limits).
+
+---
+
+## Previous verification: first-moment layout and cheap-model schema fix
 
 Run on the local macOS machine, Node 26.3, Python 3.12. Nothing here was pushed, deployed, or committed. The local dev server on ports 5173 and 3001 was left running and was not restarted or stopped for this work.
 
@@ -51,7 +96,7 @@ New browser tests (`tests/browser/app.spec.ts`), measured from element geometry:
 | Engine | every order set was accepted by the Diplomacy adjudicator and the phase resolved |
 | Archive record | new record "Live verification · economical mix · GLM 5.3 Flash + Haiku 5.5 · one phase", id `b5fb5063-fc23-44e3-8721-a081e778ebaa`, status complete |
 
-The previous partial record, "Live verification · economical mix · GLM 5.3 Flash + Haiku 5.5 · one phase" (status error, 0 phases, id `6c4bdd39-b95d-4ccf-b1f0-e7ec36f00226`), is preserved unchanged. So are the earlier records: "A continent of possibilities", the three-model runs, and the sample. The archive lists seven records in total.
+The previous partial record, "Live verification · economical mix · GLM 5.3 Flash + Haiku 5.5 · one phase" (status error, 0 phases, id `6c4bdd39-b95d-4ccf-b1f0-e7ec36f00226`), was preserved unchanged at the time, as were the earlier records: "A continent of possibilities", the three-model runs, and the sample. The archive then listed seven records. (All of these except the sample were later deleted at the owner's request; see the archive note above.)
 
 The earlier failure was Germany's promise of an order it could not issue, after three calls. Under the new contract the same kind of output cannot be generated, as the wire and rejection tests show. The provider, not this repository, decides how strictly `json_schema` strict mode is honored. Here both models returned schema-conforming output in all 14 calls.
 
@@ -114,7 +159,7 @@ A bounded live run was executed once with `scripts/live-proof.ts`: one phase, on
 
 - **Catalog:** both ids are present on the live OpenRouter catalog with chat-completions endpoints. GLM 5.3 Flash costs $0.0399 per million input tokens and $0.0784 per million output tokens. Haiku 5.5 costs $0.10 and $0.50 per million, with a long-prompt tier of $0.50 and $2.50 above 100,000 prompt tokens.
 - **Wire:** each request carried `reasoning: { effort: 'low', exclude: true }` and `max_tokens: 1800`. Every response returned HTTP 200 with the requested model. Reasoning tokens were 30 and 13 for GLM and 0 for Haiku, so low effort was applied.
-- **Outcome:** the run stopped after three negotiation calls (England/GLM, France/Haiku, Germany/GLM) with the explicit error *GERMANY promised an order it cannot issue*. The engine-side legality check rejected that message before it was saved, so the phase did not resolve. The partial record is preserved in the local archive as “Live verification · economical mix · GLM 5.3 Flash + Haiku 5.5 · one phase” (status error, 0 resolved phases). No retry was made.
+- **Outcome:** the run stopped after three negotiation calls (England/GLM, France/Haiku, Germany/GLM) with the explicit error *GERMANY promised an order it cannot issue*. The engine-side legality check rejected that message before it was saved, so the phase did not resolve. The partial record was saved in the local archive as “Live verification · economical mix · GLM 5.3 Flash + Haiku 5.5 · one phase” (status error, 0 resolved phases); it was later deleted at the owner’s request. No retry was made.
 - **Spend:** 4,910 input and 652 output tokens; provider-reported cost **$0.000526** against the $0.10 budget.
 - **Not reached:** sealed-order calls for either model, adjudication with live model output, and a completed live phase. Those steps remain unverified with these models.
 
@@ -122,7 +167,7 @@ An earlier attempt in the first run failed before any billable call, because the
 
 ### Existing saved records
 
-The archive keeps every prior record unchanged, including the three-model proof runs described below, the sample, and an earlier errored economical-model record named “A continent of possibilities” (status error, 0 resolved turns, $0.0009). No record was deleted or rewritten.
+At the time of this record the archive kept every prior record unchanged, including the three-model proof runs described below, the sample, and an earlier errored economical-model record named “A continent of possibilities” (status error, 0 resolved turns, $0.0009). These records were later deleted at the owner's request; see the archive note at the top.
 
 ### Visual checks
 
@@ -157,7 +202,7 @@ The Python engine emits an upstream deprecation warning about `datetime.utcfromt
 
 ## Actual OpenRouter runs
 
-These calls used real providers through `@openrouter/ai-sdk-provider` and AI SDK structured output. They are separate from the mocked provider-contract tests. Both runs are saved in the local match archive.
+These calls used real providers through `@openrouter/ai-sdk-provider` and AI SDK structured output. They are separate from the mocked provider-contract tests. Both runs were saved in the local match archive at the time; those records were later deleted at the owner's request.
 
 | Evidence | Opening run | Branched continuation |
 |---|---|---|

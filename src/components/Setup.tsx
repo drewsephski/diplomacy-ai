@@ -14,6 +14,7 @@ import {
   powerMap,
 } from '../domain';
 import { POWERS, type AgentConfig, type Match, type ModelInfo, type Power, type Profile } from '../types';
+import type { RunOutcome } from '../watch/useWatch';
 import { Crest, Modal } from './Shared';
 import { Combobox, type ComboboxOption } from './ui/Combobox';
 import { Select } from './ui/Select';
@@ -27,23 +28,28 @@ const STEPS = ['Players', 'Guidance', 'Length', 'Start'] as const;
  * novice can press Start game on the first pass. Per-country models, instructions, and detailed
  * limits sit under Advanced. Nothing calls a model until the final Start game press.
  *
- * Start game makes two requests, in order: create the match (once), then run one phase. If the
- * second fails, the created match is kept and "Try starting again" repeats only the start.
+ * Start game makes two requests, in order: create the match (once), then run one phase through the
+ * page's watch session. If the second fails, the created match is kept and "Try starting again"
+ * repeats only the start. Closing the dialog (button, Escape, or backdrop) during a start cancels
+ * whatever has not happened yet: no run is sent after a dismissal, and a run already sent is paused.
  */
 export function Setup({
   configured,
   initialMode,
   onClose,
   onCreated,
-  onStarted,
+  onStart,
+  onAbandoned,
 }: {
   configured: boolean;
   initialMode?: 'live' | 'sandbox';
   onClose: () => void;
   /** The match exists but has not started. The app may show it, nothing runs. */
   onCreated: (m: Match) => void;
-  /** The first phase has been requested. The app begins watching from here. */
-  onStarted: (m: Match) => void;
+  /** Requests the first phase through the watch session. Resolves once the server answers. */
+  onStart: (m: Match) => Promise<RunOutcome>;
+  /** The dialog was dismissed after the create request was sent: the game is saved, never started. */
+  onAbandoned: (m: Match) => void;
 }) {
   const [step, setStep] = useState(0);
   const [mode, setMode] = useState<'live' | 'sandbox'>(initialMode ?? (configured ? 'live' : 'sandbox'));
@@ -61,6 +67,14 @@ export function Setup({
   const [created, setCreated] = useState<Match>();
   const [catalogError, setCatalogError] = useState('');
   const flight = useRef(false);
+  /** False once the dialog is dismissed. Nothing continues a start after that. */
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     api<ModelInfo[]>('/models')
@@ -104,16 +118,21 @@ export function Setup({
       let match = created;
       if (!match) {
         match = await api<Match>('/matches', body());
+        if (!alive.current) {
+          onAbandoned(match);
+          return;
+        }
         setCreated(match);
         onCreated(match);
       }
-      const started = await api<Match>(`/matches/${match.id}/run`, { single: true });
-      onStarted(started);
+      const outcome = await onStart(match);
+      if (!alive.current) return;
+      if (outcome.kind === 'failed') setError(outcome.error);
     } catch (e) {
-      setError((e as Error).message);
+      if (alive.current) setError((e as Error).message);
     } finally {
       flight.current = false;
-      setBusy(false);
+      if (alive.current) setBusy(false);
     }
   }
 
@@ -377,8 +396,9 @@ export function Setup({
               </div>
             </dl>
             <p className="muted small-copy">
-              Pressing Start game creates the game and plays its first phase right away. Then the game plays on, one phase at a
-              time, until you pause it. You can pause, resume, or step through at any point.
+              Pressing Start game creates the game and plays its first phase right away. With Guided view on, each phase then
+              opens a short walkthrough, and the next phase waits until you press Continue watching. With it off, the game plays
+              on one phase at a time until you pause it. Closing, hiding, or leaving the board always pauses.
             </p>
             {created && (
               <div className="info-note" role="status">

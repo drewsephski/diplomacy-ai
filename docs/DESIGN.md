@@ -16,13 +16,13 @@ Core tokens (defined in `src/styles.css`, reused by `src/guide.css`):
 
 The observer should understand four things at a glance: what they are watching, where the record comes from, where in time they are, and what they can do next.
 
-1. **Role.** The welcome card states the spectator role in one line: seven countries negotiate privately, seal secret orders that resolve together, and 18 of 34 supply centers wins. It offers two starting actions, *Watch the recorded sample* (no cost) and *Start a live match with AI agents*. It is dismissible, its dismissal is remembered in this browser, and **How to watch** restores it. No modal blocks the first view.
+1. **Role.** The welcome card states the spectator role in one line: seven countries negotiate privately, seal secret orders that resolve together, and 18 of 34 supply centers wins. It offers *Set up a game*, *Watch a labelled sample with a guide* (no cost), and *Try the no-cost sandbox*. It is dismissible, its dismissal is remembered in this browser, and **How to watch** restores it. No modal blocks the first view.
 2. **Provenance.** The status bar labels the mode as **RECORDED SAMPLE**, **LOCAL SANDBOX**, or **LIVE AGENTS**, with a tooltip stating what that means. The footer repeats it. Cost reads “No model calls” except in live mode.
-3. **Time.** A checkpoint is the board at the **start** of a phase. The matchbar shows “Checkpoint” and the phase on the board. The footer names the **last resolved** phase in plain words, for example *Last resolved: Spring 1901 movement · The price of a promise.* The timeline reads *Opening* and *Checkpoint k of n · Recorded history / Live edge*. Spring and autumn labels are never used for “before” and “after” the same moment.
+3. **Time.** A moment is the board at the **start** of a phase. The matchbar shows *Latest* or *Earlier moment* and the phase on the board. The footer names the last phase in plain words, for example *Last phase: Spring 1901 movement · The price of a promise.* The timeline reads *Start* and *Moment k of n · Latest / Earlier in the record*. Spring and autumn labels are never used for “before” and “after” the same moment.
 4. **Progress.** The **phase guide** strip shows one of four states:
-   - *Recorded history*: the past. It says that later dispatches and sealed orders stay hidden, and offers *Jump to the live edge*.
+   - *Earlier in the record*: the past. It says that later messages and sealed orders stay hidden, and offers *Jump to the latest phase* (navigation only; it plays nothing).
    - *Happening now*: a live phase in progress. Three steps: private talks (round and conversation count), sealed orders (count of seven), and resolution (waiting for every seal). The status line says whether agents are working, pausing, or paused.
-   - *Next phase*: the live edge before anything runs. It explains what the next phase involves and that nothing runs until the observer presses Run.
+   - *Next phase*: the latest moment before anything runs. It explains what the next phase involves and that nothing is played until the observer presses Play.
    - *Match complete*: the final position, with replay, export, and branching named as the next steps.
 5. **Story.** The right panel’s **What happened** tab explains the last resolved phase, in this order: the phase title and summary counts, then the moments, then a *Phase summary* paragraph, then a collapsed list of *every submitted order in plain language, with its exact engine text and outcome*. Moments are listed in priority order (broken commitments, supply centers gained and lost, kept commitments whose order still failed, dislodged units, bounced attacks, and successful moves into occupied provinces). Each moment has a plain headline and detail, the promised and submitted orders side by side where a commitment is involved, links to the country, the map location, and the dispatches where relevant. The first moment is placed directly under the title so the observer reads the pivotal event without scrolling.
 6. **Watch next.** At the end of the story’s scroll area, one rule-derived line says what matters in the phase that comes next. These are statements about the rules, not predictions.
@@ -33,10 +33,33 @@ The observer should understand four things at a glance: what they are watching, 
 
 - Every line of progress derives from recorded state. The Happening now counts come from `negotiated`, the number of active countries, and `sealedCount` from the spectator projection. The UI never shows timers, invented per-country thinking, or percentages that the record does not support.
 - Sealed order contents never reach the browser before resolution. The spectator projection sends `decisions: {}` for a pending phase.
-- Checkpoints in the past show only resolved phases. Pending messages appear only at the live edge (`index === turns.length`).
+- Earlier moments show only resolved phases. Pending messages appear only at the latest moment (`index === turns.length`).
 - A moment reads the checkpoints immediately before and after its phase, never later ones. A regression test changes later history and asserts the story is unchanged.
-- Labels describe actual behavior. *Play replay* never calls a model. *Run agents* and *Run one phase* are the only controls that bill calls, and their accessible names say so.
-- Replay speed changes only how fast recorded checkpoints advance. The control is named *Replay speed*, with the note *agents run at model speed*.
+- Labels describe actual behavior. *Watch with a guide*, *Play replay*, and *Replay from start* never call a model. *Play first phase*, *Resume game*, *Resume at latest*, *Continue watching*, and *Play next phase* are the only controls that request a phase, and in a live game their accessible names say the calls are billed.
+- The status line reports the session's real state, in this order of precedence: *Pausing*, *Reading · the next phase waits for Continue watching*, *Playing one phase*, *Playing*, *A phase is being played*, *Replaying recorded phases*, *Reading · nothing is playing*, *Looking at an earlier moment · nothing is playing*, then the idle states.
+- Replay speed changes only how fast recorded moments advance.
+
+### Watch session
+
+One explicit press (Start game, Resume game, Resume at latest, or Play next phase) creates a session for one game. It is the only code that sends a run request (`src/watch/useWatch.ts`), and its decision is a pure function (`src/watch/decide.ts`).
+
+- **Identity.** Each session has a token. Ending it invalidates the token, so a late response, poll, or timer from it can never continue or restart it. Showing any game (open, create, branch, delete fallback) ends the previous session first.
+- **One phase at a time.** A request is sent only when nothing is in flight and the server reports the game idle. An expert (guidance off) watch leaves a short gap between phases.
+- **Guided hold.** A phase that resolves during a guided session holds the session and opens that phase's walkthrough by itself. Only **Continue watching** (or **See the result** after the final phase) lifts the hold.
+- **Stopping is central.** Pause, closing the guide, turning guidance off, the Guided view toggle, every dialog, every tab other than Watch, a hidden page, seeking, and switching games all call one function (`holdWatch` in `App.tsx`). It ends the session and the free replay timer, and pauses the server if this page may have started a phase. A close or a toggle is never a reason to resume.
+- **Pause always wins.** Every run request carries a ticket. The pause carries the same ticket and is sent at once, even while the run request is in transit; the server refuses a run whose ticket was already paused. When a late run response arrives, the pause is sent again for the job that now exists. *Pausing…* stays on the button until the server reports the game idle.
+- **Setup.** Closing the dialog during *Starting…* (button, Escape, or backdrop) cancels what has not happened: a game created after the dismissal is saved for History and not shown or started; a run already sent is paused with its ticket. No watch starts after the dialog is gone.
+
+### Guided card
+
+- A non-modal dialog over the map on desktop. Escape closes it, focus moves to its heading when it opens and returns to the opener when it closes.
+- On a phone (≤760px) it is a bottom sheet fixed to the viewport, rendered into `<body>`, at most about half the screen tall. When it opens, the map scrolls to the top of the screen above it, so the province in focus stays visible wherever the viewer had scrolled. The sheet's body scrolls; its actions stay on screen; the page gets bottom padding so the footer can be scrolled above the sheet.
+- The phase summary offers what is true for the session: **Continue watching** (a held phase, with the number of billed calls the next phase may make), **See the result** (the final phase), **Continue** (the next recorded phase), **Resume game · billed / (free)** beside **Done** (the latest phase of an unfinished game with nothing playing), or **Done**. While a session is active, the close controls read **Pause and close guide** and **Turn guidance off and pause**. Reaching the summary and closing marks the phase as read.
+- While a card is open, the footer's primary control reads **Close guide** instead of offering a second, dead launch button.
+
+### History
+
+A top-level tab, separate from *Timeline* and *Compared with history*. It lists the viewer's games with mode, phases, cost, and their true result, and lists the sample apart. *Open* and *From the start* only load a record. Opening a game never plays it, and Delete asks first.
 
 ### Map
 
@@ -51,8 +74,9 @@ The branch dialog is titled *What if one decision changed?* It shows two labelle
 ### Empty, loading, error, and complete states
 
 - **Loading:** “Preparing the European theater…” Nothing is run or billed while loading.
-- **Error:** the banner names the error. A failed load offers *Try again*. A stopped live phase says so in the status line and tells the observer to press Run to continue, which resumes from the saved partial state.
-- **Empty story (opening position):** “Nothing has resolved yet,” with the next action named.
+- **Error:** the banner names the error, for the game on screen only. A failed request for a phase says *The next phase could not be requested … Nothing further was sent. Press Resume game to try again.* A lost connection while a phase plays says so and asks the server to pause. A game stopped by the server (for example at the budget ceiling) shows its own error and an end screen that names the reason. Resume resumes from the saved partial state.
+- **Plain status:** a dismissed Setup reports *Start cancelled. The game is saved and paused.* or that the game *was saved without starting*.
+- **Empty story (opening position):** “Nothing has happened yet,” with the next action named, and, when the record has phases, *Walk through the first phase with a guide*.
 - **Empty dispatches:** explains whether the phase is pending, the opening, or quiet.
 - **Complete:** the final position, with replay, export, and branching named.
 
@@ -73,7 +97,7 @@ Every dropdown is a custom control. No native `<select>` remains in the product.
 - **Desktop (≥1001px):** three columns under a guidance band. The power rail scrolls within its own column when long. The map keeps the largest share of the height. The playback footer stays visible without scrolling at 1536×1024.
 - **First moment at 1536×1024:** on the opening sample the story region is about 335px tall, and the first broken commitment's headline, its Promised/Submitted row, and its actions all sit inside that region without scrolling. The in-focus strip starts below the story.
 - **Shorter desktop (1280×800 and 1366×768):** the theater keeps its 640px minimum, so the page scrolls to reach the playback footer. The story region scrolls rather than clipping. The headline and promise row stay in view, and the action buttons are one scroll away inside the story.
-- **Tablet and phone (≤1000px):** the theater stacks in reading order: orientation, phase guide, map, story and dispatches, then the in-focus strip, then playback. The phase guide and branch context collapse to a single column at ≤760px. The orientation actions wrap to full width. There is no horizontal page overflow at 390px, the first moment's headline and promise row fit the screen width, and the custom listboxes stay within the viewport.
+- **Tablet and phone (≤1000px):** the theater stacks in reading order: orientation, phase guide, map, story and dispatches, then the in-focus strip, then playback. At ≤640px the status line wraps onto its own row, so *Guided view* and *How to watch* never leave the screen. The phase guide and branch context collapse to a single column at ≤760px. The orientation actions wrap to full width. There is no horizontal page overflow at 390px, the first moment's headline and promise row fit the screen width, and the custom listboxes stay within the viewport.
 - **Reading size:** story body text is 12px and moment labels, eyebrows, and the in-focus label are at least 9px. Map labels and coordinates keep their smaller map-scale sizes.
 
 ## Model defaults, reasoning, and cost context
@@ -91,7 +115,7 @@ Every dropdown is a custom control. No native `<select>` remains in the product.
 - The map uses authoritative jDip standard-map geometry rather than generated coastlines. Generated cartography cannot guarantee adjacency or coast correctness.
 - Units are army and fleet symbols rather than pictorial miniatures, so positions remain legible in small provinces.
 - The 1901 start is enforced: Britain has three centers and Russia four. The concept image’s illustrative counts are not copied.
-- The sample opens at the first checkpoint after its first resolved phase, so the observer sees a real betrayal immediately. Checkpoint zero remains available.
+- The sample opens at the first moment after its first resolved phase, so the observer sees a real betrayal immediately. Moment zero remains available.
 - The UI chrome uses sans-serif for controls and data; serif type carries the map title, phase titles, moments, and quotations.
 - Dialogs for configuration, branching, dossiers, and archive extend the composition to meet functional requirements.
 
@@ -100,11 +124,11 @@ Every dropdown is a custom control. No native `<select>` remains in the product.
 Checks run from the project root. Current results are recorded in [VERIFICATION.md](VERIFICATION.md).
 
 - Typecheck, ESLint, Ruff, production build, TypeScript unit tests, Python engine tests.
-- Playwright browser flows against a production build with an isolated database: the sample explanation and exploration; the first-visit role card; recorded-history guarantees; a broken commitment through the map to the full order list; the pivotal event through advancing and branching; sandbox labels and phase limit; no run on load; a live phase in progress with observed progress only; custom controls by keyboard and pointer; dialogs; mobile overflow and listbox placement.
-- Screenshots were inspected at 1536×1024 and 390×844.
+- Playwright browser flows against a production build with an isolated database and a blank provider key: the sample explanation and exploration; the first-visit role card; recorded-history guarantees; a broken commitment through the map to the full order list; the pivotal event through advancing and branching; sandbox labels and phase limit; no run on load; a live phase in progress with observed progress only; custom controls by keyboard and pointer; dialogs; mobile overflow and listbox placement; History and deletion; brand assets; and the watch-session regressions in `watch.spec.ts` and `layout.spec.ts`, which count run and pause requests.
+- Screenshots were inspected at 1536×1024, 1280×800, and 390×844.
 
 ## Not verified here
 
-- Live runs cover one phase with the economical models (one proof run, see VERIFICATION.md). Multi-phase live play, long-game strategic quality, and results from other providers are not verified.
+- Earlier paid runs covered one phase with the economical models (see VERIFICATION.md; their archive records were later deleted at the owner's request). The watch session, guided hold, and pause race are verified with sandbox games and browser-side live fakes, not with paid calls. Multi-phase live play, long-game strategic quality, and results from other providers are not verified.
 - Browser checks use Chromium only.
 - The documentation capture spec (`CAPTURE_SCREENSHOTS=1`) regenerates the images in `docs/`.

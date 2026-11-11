@@ -252,23 +252,42 @@
   }
 }
 
-/* Narrow screens: the card becomes a bottom sheet over the lower map, and can be collapsed. */
+/*
+ * Narrow screens: the card is a bottom sheet fixed to the viewport (rendered into <body>), so it is
+ * visible wherever the page was scrolled. It takes at most about half the screen; the map is scrolled
+ * to the top above it, so the focused province stays in view. Its body scrolls; its actions stay put.
+ */
 @media (max-width: 760px) {
-  .guide-card {
-    left: 8px;
-    right: 8px;
-    bottom: 8px;
+  .guide-card.sheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
     width: auto;
-    max-height: min(64%, 420px);
+    max-height: min(48dvh, 440px);
+    border-radius: 10px 10px 0 0;
+    border-bottom: 0;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+    background: #101b21f7;
   }
-  .guide-card.collapsed {
+  .guide-card.sheet.collapsed {
     max-height: none;
   }
   .guide-body {
     font-size: 15px;
   }
   .guide-card h3 {
-    font-size: 22px;
+    font-size: 21px;
+  }
+  .guide-card.sheet .guide-foot {
+    padding-top: 8px;
+  }
+  .guide-card.sheet .guide-nav {
+    flex-wrap: wrap;
+  }
+  html.guide-sheet-open body {
+    padding-bottom: min(48dvh, 440px);
   }
 }
 
@@ -535,5 +554,51 @@
   }
   .wizard-foot .button {
     justify-content: center;
+  }
+}
+
+/* ---------- Plain status messages (not errors) ---------- */
+.info-banner {
+  background: #1f2c2a;
+  color: #cfe0d5;
+  padding: 11px 26px;
+  font-size: 12px;
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  border-bottom: 1px solid #9dbba233;
+}
+.info-banner button,
+.error-banner button {
+  flex: none;
+}
+.guide-launch.start {
+  margin: 12px 0 0;
+}
+.resume-latest span {
+  white-space: nowrap;
+}
+
+/* ---------- Status line wraps on phones instead of pushing the controls off screen ---------- */
+@media (max-width: 640px) {
+  .match-status {
+    flex-wrap: wrap;
+    white-space: normal;
+    row-gap: 6px;
+  }
+  .match-status .status-text {
+    flex: 1 1 calc(100% - 14px);
+    min-width: 0;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+  .match-status .usage {
+    margin-left: 12px;
+    padding-left: 0;
+    border-left: 0;
+  }
+  .info-banner,
+  .error-banner {
+    padding-inline: 16px;
   }
 }

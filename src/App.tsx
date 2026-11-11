@@ -9,14 +9,14 @@ import { type Match, type MatchSummary, type Power } from './types';
 import { Dossier } from './components/Dossier';
 import { Setup } from './components/Setup';
 import { Branch } from './components/Branch';
-import { Theater, type GuideActions } from './components/Theater';
+import { Theater, type GuideActions, type SummaryAction } from './components/Theater';
 import { Playback } from './components/Playback';
 import { Help } from './components/Help';
 import { HistoricalComparison } from './components/HistoricalComparison';
 import { SavedGames } from './components/SavedGames';
 import { Chronicle, Comparison, Diplomacy } from './components/Views';
 import { Empty } from './components/Shared';
-import { useWatch } from './watch/useWatch';
+import { useWatch, type RunOutcome, type StopReason } from './watch/useWatch';
 
 /** Approved in-page mark: transparent PNG, so it sits directly on the navy page with no tile or halo. */
 const BRAND_MARK = '/brand/seven-powers-mark-256.png?v=2';
@@ -37,21 +37,30 @@ export default function App() {
   const [expertPlaying, setExpertPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
   const [busy, setBusy] = useState(false);
-  const [pauseRequested, setPauseRequested] = useState(false);
   const [introHidden, setIntroHidden] = useState(() => readFlag(INTRO_KEY));
   const [guided, setGuided] = useState(readGuided);
   const [guide, dispatchGuide] = useReducer(guideReducer, undefined, () => initialGuide(0));
   const follow = useRef(true);
+  /** The match on screen. Every async result for another match is dropped. */
   const currentId = useRef('');
+  /** Increments on every navigation between matches; an async result from an older navigation is dropped. */
+  const nav = useRef(0);
   const opener = useRef<HTMLElement | null>(null);
+  /** The match whose first phase Setup is requesting right now, if any. */
+  const starting = useRef<string | undefined>(undefined);
 
   const reading = guide.turn !== undefined;
   const watch = useWatch({
     match,
+    guided,
     reading,
-    setMatch: (m) => {
-      if (currentId.current === m.id) setMatch(m);
+    onMatch: (m) => {
+      if (currentId.current !== m.id) return;
+      setMatch(m);
+      if (follow.current) setIndex(m.turns.length);
+      if (m.status !== 'running') void refreshList();
     },
   });
 
@@ -71,28 +80,59 @@ export default function App() {
     return list;
   }, []);
 
-  const load = useCallback(
-    async (id: string, at?: number) => {
-      setBusy(true);
-      setError('');
-      setExpertPlaying(false);
-      try {
-        const m = await api<Match>(`/matches/${id}`);
-        currentId.current = m.id;
-        setMatch(m);
-        setIndex(at ?? (m.mode === 'sample' ? Math.min(1, m.turns.length) : m.turns.length));
-        setParent(await loadParent(m));
-        follow.current = true;
-        dispatchGuide({ type: 'reset', resolved: m.turns.length });
-        localStorage.setItem('seven-powers-match', id);
-      } catch (e) {
-        setError((e as Error).message);
-      } finally {
-        setBusy(false);
-      }
-    },
-    [],
-  );
+  /**
+   * The one way to stop automatic play: ends the watch session (pausing the server if this page may
+   * have started it) and the free replay timer. Dialogs, other tabs, a hidden page, seeking, closing
+   * the guide, the guided toggle, and switching games all call it. Nothing resumes on its own.
+   */
+  function holdWatch(reason: StopReason) {
+    setExpertPlaying(false);
+    watch.stop(reason, match?.status === 'running' ? match.id : undefined);
+  }
+  const holdRef = useRef(holdWatch);
+  holdRef.current = holdWatch;
+
+  /** Shows a match. Always ends the previous session first, so no old session can come back to life. */
+  function present(m: Match, at?: number) {
+    holdRef.current('switch');
+    watch.clearNotice();
+    const n = nav.current;
+    currentId.current = m.id;
+    setMatch(m);
+    setIndex(at ?? (m.mode === 'sample' ? Math.min(1, m.turns.length) : m.turns.length));
+    follow.current = at === undefined || at === m.turns.length;
+    dispatchGuide({ type: 'reset', resolved: m.turns.length });
+    setParent(undefined);
+    void loadParent(m).then((p) => {
+      if (nav.current === n) setParent(p);
+    });
+    try {
+      localStorage.setItem('seven-powers-match', m.id);
+    } catch {
+      /* The choice then lasts only for this page view. */
+    }
+  }
+
+  /** Loads and shows a saved game. Only the latest of several rapid opens is shown. Never runs it. */
+  async function load(id: string, at?: number) {
+    const n = ++nav.current;
+    holdRef.current('switch');
+    setBusy(true);
+    setError('');
+    try {
+      const m = await api<Match>(`/matches/${id}`);
+      if (nav.current !== n) return false;
+      present(m, at);
+      return true;
+    } catch (e) {
+      if (nav.current === n) setError((e as Error).message);
+      return false;
+    } finally {
+      if (nav.current === n) setBusy(false);
+    }
+  }
+  const loadRef = useRef(load);
+  loadRef.current = load;
 
   // Opening the page loads the saved or sample record only. Nothing is run or billed on load.
   useEffect(() => {
@@ -104,7 +144,7 @@ export default function App() {
         setConfigured(health.liveConfigured);
         const saved = localStorage.getItem('seven-powers-match');
         const initial = list.find((m) => m.id === saved) || list.find((m) => m.mode === 'sample') || list[0];
-        if (initial) await load(initial.id);
+        if (initial) await loadRef.current(initial.id);
       } catch (e) {
         if (!cancelled) setError((e as Error).message);
       }
@@ -112,35 +152,18 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [load, refreshList]);
+  }, [refreshList]);
 
-  // While the server is working on a phase, follow its progress.
+  // A hidden page never keeps playing: the session ends, and coming back needs an explicit Resume.
   useEffect(() => {
-    if (!match || match.status !== 'running') return;
-    const id = match.id;
-    let fetching = false;
-    const timer = setInterval(async () => {
-      if (fetching) return;
-      fetching = true;
-      try {
-        const next = await api<Match>(`/matches/${id}`);
-        if (currentId.current !== id) return;
-        setMatch(next);
-        if (follow.current) setIndex(next.turns.length);
-        if (next.status !== 'running') {
-          setPauseRequested(false);
-          void refreshList();
-        }
-      } catch (e) {
-        setError((e as Error).message);
-      } finally {
-        fetching = false;
-      }
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [match?.id, match?.status, refreshList]);
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') holdRef.current('hidden');
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
 
-  // Expert sample replay: a timer over recorded phases. Never a model call.
+  // Free recorded replay: a timer over recorded phases, for any game. Never a model call.
   useEffect(() => {
     if (!expertPlaying || !match) return;
     const timer = setTimeout(() => {
@@ -168,25 +191,61 @@ export default function App() {
 
   /** Opens the walkthrough of one resolved phase and shows the board after it. */
   function openTurn(turn: number, step = 0) {
-    if (document.activeElement instanceof HTMLElement) opener.current = document.activeElement;
+    if (!match || turn < 0 || turn >= match.turns.length) return;
+    if (document.activeElement instanceof HTMLElement && !document.activeElement.closest('.guide-card')) opener.current = document.activeElement;
     setExpertPlaying(false);
-    follow.current = false;
+    follow.current = turn + 1 === match.turns.length;
     setIndex(turn + 1);
     dispatchGuide({ type: 'open', turn, step });
+  }
+
+  // A phase that resolved during an explicit session opens its walkthrough by itself (guided view).
+  // A watch session holds the next phase until the viewer presses Continue watching.
+  useEffect(() => {
+    if (!guided || !match || tab !== 'Watch' || modal) return;
+    if (watch.holdTurn !== undefined && guide.turn !== watch.holdTurn) openTurn(watch.holdTurn, 0);
+  }, [watch.holdTurn, guided, match?.id, tab, modal]);
+  useEffect(() => {
+    const a = watch.arrival;
+    if (!a || a.kind !== 'once' || !guided || !match || a.matchId !== match.id || tab !== 'Watch' || modal) return;
+    openTurn(a.turn, 0);
+  }, [watch.arrival?.seq]);
+
+  /** Starts (or resumes) watching from the latest phase. An explicit viewer press only. */
+  function startWatching(opts: { report?: boolean } = {}) {
+    if (!match) return Promise.resolve<RunOutcome>({ kind: 'cancelled' });
+    setError('');
+    setInfo('');
+    setExpertPlaying(false);
+    follow.current = true;
+    setIndex(match.turns.length);
+    if (reading) dispatchGuide({ type: 'close', finished: guide.turn === match.turns.length - 1 });
+    return watch.begin(match.id, { cleared: match.turns.length, immediate: true, report: opts.report });
+  }
+
+  /** Plays exactly one phase with the server, then stops. Live play is billed per model call. */
+  function playOnePhase() {
+    if (!match) return;
+    setError('');
+    setInfo('');
+    follow.current = true;
+    setIndex(match.turns.length);
+    dispatchGuide({ type: 'close' });
+    void watch.begin(match.id, { kind: 'once', cleared: match.turns.length });
   }
 
   const guideActions: GuideActions = {
     open: (turn, step) => {
       if (!match) return;
-      const t = turn ?? (index > 0 ? index - 1 : 0);
-      if (t < 0 || t >= match.turns.length) return;
-      openTurn(t, step ?? 0);
+      openTurn(turn ?? (index > 0 ? index - 1 : 0), step ?? 0);
     },
     step: (to) => {
       if (!guidePhase) return;
       dispatchGuide({ type: 'step', to, count: guidePhase.events.length });
     },
+    // Closing is never permission to keep playing: during a watch it pauses the game.
     close: (finished = false) => {
+      if (watch.phase !== 'idle') holdWatch('guide');
       dispatchGuide({ type: 'close', finished });
       follow.current = match ? index === match.turns.length : true;
       restoreFocus();
@@ -198,12 +257,19 @@ export default function App() {
       dispatchGuide({ type: 'close', finished: true });
       openTurn(next, 0);
     },
-    runNext: () => {
+    continueWatching: () => {
+      dispatchGuide({ type: 'close', finished: true });
+      follow.current = true;
+      watch.continueWatching();
+      restoreFocus();
+    },
+    resume: () => {
       dispatchGuide({ type: 'close', finished: true });
       restoreFocus();
-      void playOnePhase();
+      void startWatching();
     },
     guidanceOff: () => {
+      holdWatch('guide');
       setGuided(false);
       writeGuided(false);
       dispatchGuide({ type: 'close' });
@@ -212,119 +278,115 @@ export default function App() {
     locate: (code) => setFocus((f) => ({ code, nonce: (f?.nonce ?? 0) + 1 })),
   };
 
+  /** The viewer moved through the record. Scrubbing always stops automatic play. */
   function seek(i: number) {
-    setExpertPlaying(false);
+    holdWatch('seek');
     dispatchGuide({ type: 'close' });
     setIndex(i);
     follow.current = match ? i === match.turns.length : true;
   }
 
-  /** Plays exactly one phase with the server, then stops. Live play is billed per model call. */
-  async function playOnePhase() {
-    if (!match || busy || watch.inFlight) return;
-    setBusy(true);
-    setError('');
-    follow.current = true;
-    setIndex(match.turns.length);
-    try {
-      const next = await api<Match>(`/matches/${match.id}/run`, { single: true });
-      setMatch(next);
-      setPauseRequested(false);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
+  const finishedGame = match ? match.status === 'complete' || match.checkpoints.at(-1)!.state.done : false;
+  /** The latest edge of an unfinished game of the viewer's own: the only place that can play a phase. */
+  const liveEdge = Boolean(match && match.mode !== 'sample' && index === match.turns.length && !finishedGame);
+  const controlling = watch.phase !== 'idle' || match?.status === 'running';
 
-  /** Primary control. Sample: replay. Live and sandbox: start, pause, or resume the watch session. */
+  /** Primary control. At the live edge: start, pause, or resume. Anywhere else: free recorded replay. */
   function onPrimary() {
-    if (!match) return;
-    const atEdge = index === match.turns.length;
-    if (match.mode === 'sample') {
-      if (guided) {
-        if (atEdge) openTurn(0, 0);
-        else openTurn(Math.max(0, index - 1), 0);
-        return;
-      }
-      if (expertPlaying) {
-        setExpertPlaying(false);
-        return;
-      }
-      if (atEdge) {
-        setIndex(0);
-      }
-      setExpertPlaying(true);
+    if (!match || watch.phase === 'pausing') return;
+    if (controlling) {
+      holdWatch('paused');
       return;
     }
-    if (watch.playing || match.status === 'running') {
-      void watch.pause();
+    if (liveEdge) {
+      void startWatching();
       return;
     }
-    if (match.checkpoints.at(-1)!.state.done || match.status === 'complete') return;
-    if (!atEdge) {
-      seek(match.turns.length);
+    // Recorded replay, for every mode. It never sends a run request.
+    if (reading) {
+      guideActions.close(false);
+      return;
     }
-    follow.current = true;
-    watch.begin(match.id);
+    if (match.turns.length === 0) return;
+    if (guided) {
+      openTurn(index >= match.turns.length ? 0 : Math.max(0, index - 1), 0);
+      return;
+    }
+    if (expertPlaying) {
+      setExpertPlaying(false);
+      return;
+    }
+    if (index >= match.turns.length) setIndex(0);
+    setExpertPlaying(true);
   }
 
   function onStep() {
-    if (!match) return;
-    if (match.mode === 'sample') {
-      if (index < match.turns.length) seek(index + 1);
-      return;
-    }
+    if (!match || controlling) return;
     if (index < match.turns.length) seek(index + 1);
-    else void playOnePhase();
+    else if (liveEdge) playOnePhase();
+  }
+
+  /** Explicitly leaves the recorded past for the latest phase and keeps playing from there. */
+  function resumeAtLatest() {
+    if (!match) return;
+    dispatchGuide({ type: 'close' });
+    void startWatching();
   }
 
   function created(m: Match) {
-    currentId.current = m.id;
-    setMatch(m);
-    setIndex(m.turns.length);
+    ++nav.current;
+    present(m);
     setTab(m.parent ? 'Alternate timeline' : 'Watch');
-    void loadParent(m).then(setParent);
-    follow.current = true;
-    dispatchGuide({ type: 'reset', resolved: m.turns.length });
-    localStorage.setItem('seven-powers-match', m.id);
     void refreshList();
   }
 
-  /** The first phase was requested: watch the game from here until the viewer pauses it. */
-  function started(m: Match) {
-    created(m);
-    setModal(null);
-    watch.begin(m.id);
+  /** Setup's Start game: the created match is on screen, and its first phase is requested now. */
+  async function startFirstPhase(m: Match) {
+    if (currentId.current !== m.id) created(m);
+    starting.current = m.id;
+    try {
+      const outcome = await watch.begin(m.id, { cleared: 0, immediate: true, report: false });
+      if (outcome.kind === 'started' && currentId.current === m.id) setModal(null);
+      return outcome;
+    } finally {
+      if (starting.current === m.id) starting.current = undefined;
+    }
   }
 
   async function extend(maxPhases: number, budgetUsd?: number) {
     if (!match) return;
+    const n = nav.current;
+    const id = match.id;
     setBusy(true);
     setError('');
     try {
-      const next = await api<Match>(`/matches/${match.id}/extend`, { maxPhases, budgetUsd });
+      const next = await api<Match>(`/matches/${id}/extend`, { maxPhases, budgetUsd });
+      if (nav.current !== n || currentId.current !== id) return;
       setMatch(next);
       setIndex(next.turns.length);
       follow.current = true;
     } catch (e) {
-      setError((e as Error).message);
+      if (nav.current === n) setError((e as Error).message);
     } finally {
-      setBusy(false);
+      if (nav.current === n) setBusy(false);
     }
   }
 
-  /** Switching tabs never leaves a watch session running behind a page that is not showing it. */
+  /** Any view other than the board ends automatic play; coming back needs an explicit Resume. */
   function switchTab(next: Tab) {
-    if (next === 'History' && watch.playing) void watch.pause();
+    if (next !== 'Watch') holdWatch('navigate');
     setTab(next);
+  }
+
+  function openModal(next: 'setup' | 'branch' | 'dossier' | 'help') {
+    holdWatch('dialog');
+    setModal(next);
   }
 
   /** Loads a saved game. Opening never starts it: only the Resume control in Watch sends a request. */
   async function openGame(id: string, at?: number) {
-    if (watch.playing) void watch.pause();
     setTab('Watch');
-    await load(id, at);
+    return load(id, at);
   }
 
   /** Deletes a saved game. If it was on screen, the view moves to the sample (or the first remaining game). */
@@ -336,7 +398,11 @@ export default function App() {
       const list = await refreshList();
       if (currentId.current === game.id) {
         currentId.current = '';
-        localStorage.removeItem('seven-powers-match');
+        try {
+          localStorage.removeItem('seven-powers-match');
+        } catch {
+          /* ignore */
+        }
         const next = list.find((m) => m.mode === 'sample') || list[0];
         if (next) await load(next.id);
         else setMatch(undefined);
@@ -352,13 +418,30 @@ export default function App() {
     const list = matches.length ? matches : await refreshList();
     const sample = list.find((m) => m.mode === 'sample');
     if (!sample) return;
-    await openGame(sample.id, 1);
-    if (guided) openTurn(0, 0);
+    const shown = await openGame(sample.id, guided ? 0 : 1);
+    if (shown && guided) setPendingGuide({ id: sample.id });
   }
+  // Opens the sample walkthrough once its record is on screen (after the load above settled).
+  const [pendingGuide, setPendingGuide] = useState<{ id: string }>();
+  useEffect(() => {
+    if (!pendingGuide || !match || match.id !== pendingGuide.id) return;
+    setPendingGuide(undefined);
+    openTurn(0, 0);
+  }, [pendingGuide, match?.id]);
 
   function openSetup(mode?: 'live' | 'sandbox') {
     setSetupMode(mode);
-    setModal('setup');
+    openModal('setup');
+  }
+
+  /** Every way of closing a dialog (button, Escape, backdrop) ends here. Closing Setup cancels a start in progress. */
+  function closeModal() {
+    if (modal === 'setup' && starting.current) {
+      starting.current = undefined;
+      holdWatch('dialog');
+      setInfo('Start cancelled. The game is saved and paused. Press Play first phase or Resume game when you are ready.');
+    }
+    setModal(null);
   }
 
   if (!match)
@@ -380,23 +463,25 @@ export default function App() {
   const atEdge = index === match.turns.length;
   const running = match.status === 'running';
   const complete = match.status === 'complete' || cp.state.done;
-  const errorText = error || match.error;
+  const noticeText = watch.notice?.text;
+  const errorText = error || noticeText || match.error;
   const sampleAvailable = matches.some((m) => m.mode === 'sample');
   const pending = match.mode === 'sample' ? 0 : pendingPhases(guide, match.turns.length);
   const pendingTurn = match.turns.length - pending;
   const pendingSeason = match.turns[pendingTurn] ? `${phaseName(match.turns[pendingTurn].phase)} · ${phaseKind(match.turns[pendingTurn].phase).toLowerCase()}` : undefined;
 
   let statusText: string;
-  if (pauseRequested) statusText = 'Pausing after the current model calls…';
-  else if (!watch.playing && watch.inFlight) statusText = 'Finishing the request already sent · nothing new will start';
-  else if (watch.playing && running) statusText = 'Playing · a phase is in progress';
-  else if (watch.playing) statusText = 'Playing · the next phase starts in a moment';
-  else if (running) statusText = 'A phase is being played…';
+  if (watch.phase === 'pausing') statusText = 'Pausing · the current model call finishes, then nothing new starts';
+  else if (watch.phase === 'reading') statusText = 'Reading · the next phase waits for Continue watching';
+  else if (watch.phase === 'stepping') statusText = 'Playing one phase · it stops when the phase resolves';
+  else if (watch.phase === 'watching')
+    statusText = running || watch.inFlight ? 'Playing · a phase is in progress' : 'Playing · the next phase starts in a moment';
+  else if (running) statusText = 'A phase is being played · Pause game stops it';
   else if (expertPlaying) statusText = 'Replaying recorded phases · no model calls';
-  else if (reading) statusText = 'Reading · the game waits while the guide is open';
-  else if (!atEdge) statusText = 'Looking at an earlier moment';
+  else if (reading) statusText = 'Reading · nothing is playing';
+  else if (!atEdge) statusText = 'Looking at an earlier moment · nothing is playing';
   else if (complete) statusText = 'Game over';
-  else if (match.status === 'error') statusText = 'Stopped by an error · see the banner';
+  else if (noticeText || match.status === 'error') statusText = 'Stopped · see the message above';
   else if (match.mode === 'sample') statusText = 'Recorded sample · no model calls';
   else if (match.turns.length === 0) statusText = 'Ready · press Play first phase to begin';
   else statusText = 'Paused · press Resume game to keep playing';
@@ -407,6 +492,18 @@ export default function App() {
       : match.mode === 'sandbox'
         ? 'Free · no model calls'
         : 'No model calls';
+
+  // What the phase summary card offers, from the session's real state.
+  const lastTurn = match.turns.length - 1;
+  const guideFinal = complete || match.turns.length >= match.limits.maxPhases;
+  let summaryAction: SummaryAction = { kind: 'done' };
+  if (guidePhase) {
+    if (watch.phase === 'reading' && watch.holdTurn === guidePhase.turn)
+      summaryAction = guideFinal ? { kind: 'finish' } : { kind: 'continue-watching', calls: 7 * (match.limits.diplomacyRounds + 1) };
+    else if (guidePhase.turn < lastTurn)
+      summaryAction = { kind: 'next-recorded', label: phaseName(match.turns[guidePhase.turn + 1].phase) };
+    else if (match.mode !== 'sample' && !guideFinal && watch.phase === 'idle' && !running) summaryAction = { kind: 'resume' };
+  }
 
   return (
     <div className="app-shell">
@@ -440,9 +537,11 @@ export default function App() {
             {match.mode === 'sample' ? 'Teaching sample' : `Started ${new Date(match.createdAt).toLocaleDateString()}`}
           </span>
         </div>
-        <div className="match-status">
-          <span className={`status-dot ${running || watch.playing ? 'live' : ''}`} aria-hidden="true" />
-          <span aria-live="polite">{statusText}</span>
+        <div className="match-status" data-watch={watch.phase}>
+          <span className={`status-dot ${controlling ? 'live' : ''}`} aria-hidden="true" />
+          <span className="status-text" aria-live="polite">
+            {statusText}
+          </span>
           <span className="usage" title="Live cost includes reported usage plus conservative reservations for calls still awaiting provider usage.">
             {usageText}
           </span>
@@ -452,16 +551,17 @@ export default function App() {
             className={`guide-switch ${guided ? 'on' : ''}`}
             onClick={() => {
               const next = !guided;
+              holdWatch('guide');
               setGuided(next);
               writeGuided(next);
-              if (!next) dispatchGuide({ type: 'close' });
+              dispatchGuide({ type: 'close' });
             }}
             aria-label="Guided view"
             title="Guided view explains each moment with a card. Turn it off for the full detailed view."
           >
             Guided view <b>{guided ? 'on' : 'off'}</b>
           </button>
-          <button className="icon-button" aria-label="How to watch" onClick={() => setModal('help')}>
+          <button className="icon-button" aria-label="How to watch" onClick={() => openModal('help')}>
             <CircleHelp size={16} />
           </button>
         </div>
@@ -469,11 +569,25 @@ export default function App() {
       {errorText && (
         <div className="error-banner" role="alert">
           <span>{errorText}</span>
-          {error && (
-            <button aria-label="Dismiss error" onClick={() => setError('')}>
+          {(error || noticeText) && (
+            <button
+              aria-label="Dismiss error"
+              onClick={() => {
+                setError('');
+                watch.clearNotice();
+              }}
+            >
               <X size={15} />
             </button>
           )}
+        </div>
+      )}
+      {info && !errorText && (
+        <div className="info-banner" role="status">
+          <span>{info}</span>
+          <button aria-label="Dismiss message" onClick={() => setInfo('')}>
+            <X size={15} />
+          </button>
         </div>
       )}
       {tab === 'Watch' ? (
@@ -482,7 +596,7 @@ export default function App() {
           index={index}
           selected={selected}
           focus={focus}
-          watching={watch.playing}
+          watching={controlling}
           guided={guided}
           guide={{
             phase: guidePhase,
@@ -490,15 +604,18 @@ export default function App() {
             open: reading && Boolean(guidePhase),
             pending,
             pendingSeason,
+            summaryAction,
+            closePauses: watch.phase !== 'idle',
           }}
           actions={guideActions}
           showOrientation={!introHidden}
           sampleAvailable={sampleAvailable}
           endBusy={busy}
+          pausing={watch.phase === 'pausing'}
           onSelect={setSelected}
           onLocate={(code) => setFocus((f) => ({ code, nonce: (f?.nonce ?? 0) + 1 }))}
-          onDossier={() => setModal('dossier')}
-          onDiplomacy={() => setTab('Messages')}
+          onDossier={() => openModal('dossier')}
+          onDiplomacy={() => switchTab('Messages')}
           onLiveEdge={() => seek(match.turns.length)}
           onSample={() => void openSample()}
           onSetup={() => openSetup()}
@@ -511,9 +628,13 @@ export default function App() {
           onRaiseBudget={(budgetUsd) => void extend(match.limits.maxPhases, budgetUsd)}
           onReplay={() => {
             if (guided) openTurn(0, 0);
-            else seek(1);
+            else {
+              setIndex(0);
+              follow.current = false;
+              setExpertPlaying(true);
+            }
           }}
-          onBranch={() => setModal('branch')}
+          onBranch={() => openModal('branch')}
         />
       ) : (
         <main className="secondary-content">
@@ -558,12 +679,14 @@ export default function App() {
         expertPlaying={expertPlaying}
         speed={speed}
         busy={busy}
-        pauseRequested={pauseRequested}
-        watching={watch.playing}
+        session={watch.phase}
+        running={running}
+        guideOpen={reading}
         onPrimary={onPrimary}
         onStep={onStep}
+        onResumeLatest={resumeAtLatest}
         onSeek={seek}
-        onBranch={() => setModal('branch')}
+        onBranch={() => openModal('branch')}
         onSpeed={setSpeed}
       />
       <div className="bottom-strip">
@@ -582,9 +705,13 @@ export default function App() {
           key={setupMode ?? 'default'}
           configured={configured}
           initialMode={setupMode}
-          onClose={() => setModal(null)}
+          onClose={closeModal}
           onCreated={created}
-          onStarted={started}
+          onStart={startFirstPhase}
+          onAbandoned={(m) => {
+            void refreshList();
+            setInfo(`“${m.name}” was saved without starting. Open it from History when you want to play it.`);
+          }}
         />
       )}{' '}
       {modal === 'branch' && (
@@ -593,7 +720,7 @@ export default function App() {
           index={index}
           selected={selected}
           configured={configured}
-          onClose={() => setModal(null)}
+          onClose={closeModal}
           onCreated={(m) => {
             setModal(null);
             created(m);
@@ -605,7 +732,7 @@ export default function App() {
           match={match}
           index={index}
           power={selected}
-          onClose={() => setModal(null)}
+          onClose={closeModal}
           onMoment={(step) => {
             setModal(null);
             openTurn(index - 1, step);
@@ -614,7 +741,7 @@ export default function App() {
       )}
       {modal === 'help' && (
         <Help
-          onClose={() => setModal(null)}
+          onClose={closeModal}
           onShowIntro={() => {
             setIntroHidden(false);
             writeFlag(INTRO_KEY, false);

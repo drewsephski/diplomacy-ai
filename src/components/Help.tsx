@@ -23,10 +23,12 @@ export function Help({ onClose, onShowIntro }: { onClose: () => void; onShowIntr
           <Play />
           <h3>Watch, pause, and resume</h3>
           <p>
-            <b>Start game</b> plays the first phase, then the game carries on one phase at a time. <b>Pause game</b> stops it
-            after the phase in progress. Nothing new is requested after that. <b>Resume game</b> continues. Refreshing or closing
-            the page stops the game, so nothing starts again until you press Resume game. <b>Play next phase</b> plays exactly
-            one phase and then stops.
+            <b>Start game</b> plays the first phase. With Guided view on, every phase that resolves opens a walkthrough, and
+            the next phase waits until you press <b>Continue watching</b>. With it off, the game plays on one phase at a time.
+            <b>Pause game</b> stops it: a phase in progress stops after its current model call, and nothing new is requested.
+            Closing the guide, opening a dialog, switching tabs, scrubbing the timeline, hiding the page, or refreshing all pause
+            too, and nothing starts again until you press <b>Resume game</b>. <b>Play next phase</b> plays exactly one phase.
+            Replaying a saved game, from History or the timeline, never plays a new phase or spends money.
           </p>
         </div>
         <div>

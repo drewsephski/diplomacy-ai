@@ -1,31 +1,40 @@
 import { Check, Download, GitBranch, LoaderCircle, Pause, Play, SkipForward } from 'lucide-react';
 import { phaseKind, phaseName } from '../domain';
 import type { Match } from '../types';
+import type { WatchPhase } from '../watch/useWatch';
 import { Select } from './ui/Select';
 
 interface PlaybackProps {
   match: Match;
   index: number;
-  /** Guided walkthrough on: the sample plays through popups instead of a timer. */
+  /** Guided view on: recorded replay plays through popups instead of a timer. */
   guided: boolean;
-  /** Expert sample replay timer is running. */
+  /** The free recorded-replay timer is running. */
   expertPlaying: boolean;
   speed: number;
   busy: boolean;
-  pauseRequested: boolean;
-  /** The watch session is playing: the game advances on its own, one phase at a time. */
-  watching: boolean;
+  /** The watch session for this match, as the session reports it. */
+  session: WatchPhase;
+  /** The server reports a phase in progress for this match. */
+  running: boolean;
+  /** A guide card is open. */
+  guideOpen: boolean;
   onPrimary: () => void;
   onStep: () => void;
+  onResumeLatest: () => void;
   onSeek: (i: number) => void;
   onBranch: () => void;
   onSpeed: (s: number) => void;
 }
 
 /**
- * The footer has one primary control and one secondary step. For the recorded sample, the primary
- * control replays recorded phases. For live and sandbox games it starts, pauses, or resumes the
- * watch session. Any control that can spend money says so in its name.
+ * The footer has one primary control and one secondary step.
+ *
+ * - While a game is playing, the primary control pauses it. "Pausing…" lasts until the server is idle.
+ * - At the latest phase of an unfinished game of your own, it starts or resumes the watch session.
+ * - Everywhere else (the sample, any earlier moment, a finished game) it is a free recorded replay:
+ *   guided popups with Guided view on, a timer with it off. A replay never sends a run request.
+ * - Looking at the past of an unfinished game, "Resume at latest" is a separate, labelled control.
  */
 export function Playback({
   match,
@@ -34,10 +43,12 @@ export function Playback({
   expertPlaying,
   speed,
   busy,
-  pauseRequested,
-  watching,
+  session,
+  running,
+  guideOpen,
   onPrimary,
   onStep,
+  onResumeLatest,
   onSeek,
   onBranch,
   onSpeed,
@@ -49,64 +60,71 @@ export function Playback({
   const phase = cp.state.board.name;
   const sample = match.mode === 'sample';
   const live = match.mode === 'live';
+  const controlling = session !== 'idle' || running;
+  const liveEdge = !sample && atEdge && !finished;
+  const replay = !controlling && !liveEdge;
+  const hasRecord = match.turns.length > 0;
 
   let primaryLabel: string;
   let primaryAria: string;
   let primaryDisabled = busy;
-  if (sample) {
-    if (guided) {
-      primaryLabel = atEdge ? 'Replay with a guide' : 'Watch with a guide';
-      primaryAria = atEdge
-        ? 'Walk through the recorded phases from the start, with a guide (no model calls)'
-        : 'Walk through the recorded phase with a guide (no model calls)';
-    } else if (expertPlaying) {
-      primaryLabel = 'Pause replay';
-      primaryAria = 'Pause the replay';
-    } else if (!atEdge) {
-      primaryLabel = 'Play replay';
-      primaryAria = 'Play recorded phases (no model calls)';
-    } else {
-      primaryLabel = 'Replay from start';
-      primaryAria = 'Replay recorded phases from the opening (no model calls)';
-    }
-  } else if (pauseRequested) {
+  let primaryIcon: 'play' | 'pause' | 'spin' = 'play';
+  if (session === 'pausing') {
     primaryLabel = 'Pausing…';
-    primaryAria = 'Pausing. The current phase finishes its model calls first';
+    primaryAria = 'Pausing. The current model call finishes, then nothing new is requested';
     primaryDisabled = true;
-  } else if (watching || match.status === 'running') {
+    primaryIcon = 'spin';
+  } else if (controlling) {
     primaryLabel = 'Pause game';
-    primaryAria = 'Pause game. The phase in progress finishes its current model calls, and nothing new is requested.';
-  } else if (finished) {
-    primaryLabel = 'Game over';
-    primaryAria = 'Game over. See the result in the panel above.';
-    primaryDisabled = true;
-  } else if (turn === undefined && atEdge) {
-    primaryLabel = live ? 'Play first phase' : 'Play first phase (free)';
-    primaryAria = live ? 'Play first phase. AI countries play until you pause' : 'Play first phase (free). The sandbox plays until you pause';
-  } else {
-    primaryLabel = 'Resume game';
+    primaryAria = 'Pause game. Nothing new is requested, and a phase in progress stops after its current model call.';
+    primaryDisabled = false;
+    primaryIcon = 'pause';
+  } else if (liveEdge) {
+    if (!hasRecord) {
+      primaryLabel = live ? 'Play first phase' : 'Play first phase (free)';
+      primaryAria = live ? 'Play first phase. AI countries play until you pause (billed model calls)' : 'Play first phase (free). The sandbox plays until you pause';
+    } else {
+      primaryLabel = 'Resume game';
+      primaryAria = live
+        ? 'Resume game from the latest phase until you pause (billed model calls)'
+        : 'Resume game from the latest phase until you pause (free sandbox)';
+    }
+  } else if (guideOpen) {
+    primaryLabel = 'Close guide';
+    primaryAria = 'Close the guide. Nothing is playing';
+  } else if (guided) {
+    primaryLabel = atEdge ? 'Replay with a guide' : 'Watch with a guide';
     primaryAria = atEdge
-      ? 'Resume game from the latest phase until you pause'
-      : 'Resume game: jump to the latest phase and keep playing';
+      ? 'Walk through the recorded phases from the start, with a guide (no model calls)'
+      : 'Walk through the recorded phase with a guide (no model calls)';
+    primaryDisabled = busy || !hasRecord;
+  } else if (expertPlaying) {
+    primaryLabel = 'Pause replay';
+    primaryAria = 'Pause the replay';
+    primaryIcon = 'pause';
+  } else if (!atEdge) {
+    primaryLabel = 'Play replay';
+    primaryAria = 'Play recorded phases (no model calls)';
+  } else {
+    primaryLabel = 'Replay from start';
+    primaryAria = 'Replay recorded phases from the opening (no model calls)';
+    primaryDisabled = busy || !hasRecord;
   }
 
   let stepLabel = 'Next moment';
   let stepAria = 'Show the next recorded moment';
-  let stepDisabled = busy || watching || pauseRequested;
-  if (!sample) {
-    if (atEdge && finished) {
-      stepLabel = 'No more phases';
-      stepAria = 'The game is over: no further phases to play';
-      stepDisabled = true;
-    } else if (atEdge) {
-      stepLabel = live ? 'Play next phase' : 'Play next phase (free)';
-      stepAria = live
-        ? 'Play next phase: one phase with AI countries (billed model calls), then stop'
-        : 'Play next phase (free): one sandbox phase, then stop';
-    }
-  } else if (atEdge) {
-    stepDisabled = true;
+  const stepDisabled = busy || controlling || (atEdge && !liveEdge);
+  if (liveEdge && !controlling) {
+    stepLabel = live ? 'Play next phase' : 'Play next phase (free)';
+    stepAria = live
+      ? 'Play next phase: one phase with AI countries (billed model calls), then stop'
+      : 'Play next phase (free): one sandbox phase, then stop';
+  } else if (!sample && atEdge && finished) {
+    stepLabel = 'No more phases';
+    stepAria = 'The game is over: no further phases to play';
   }
+
+  const showResumeLatest = replay && !sample && !finished && !atEdge;
 
   return (
     <footer className="playback-panel">
@@ -133,9 +151,9 @@ export function Playback({
       </div>
       <div className="playback-controls">
         <button className="play-button" onClick={onPrimary} aria-label={primaryAria} title={primaryAria} disabled={primaryDisabled}>
-          {pauseRequested ? (
+          {primaryIcon === 'spin' ? (
             <LoaderCircle size={18} className="spin" />
-          ) : watching || expertPlaying ? (
+          ) : primaryIcon === 'pause' ? (
             <Pause size={18} fill="currentColor" />
           ) : (
             <Play size={18} fill="currentColor" />
@@ -146,7 +164,18 @@ export function Playback({
           <SkipForward size={17} />
           <span>{stepLabel}</span>
         </button>
-        {sample && !guided && (
+        {showResumeLatest && (
+          <button
+            className="step-button resume-latest"
+            onClick={onResumeLatest}
+            disabled={busy}
+            aria-label={live ? 'Resume at latest: go to the latest phase and keep playing (billed model calls)' : 'Resume at latest: go to the latest phase and keep playing (free sandbox)'}
+          >
+            <SkipForward size={17} />
+            <span>{live ? 'Resume at latest · billed' : 'Resume at latest (free)'}</span>
+          </button>
+        )}
+        {replay && !guided && hasRecord && (
           <Select
             aria-label="Replay speed"
             className="speed-select"
@@ -156,8 +185,8 @@ export function Playback({
           />
         )}
         <small className="pace-note">
-          {sample
-            ? 'Recorded sample · no model calls'
+          {replay
+            ? 'Recorded phases · no model calls'
             : live
               ? 'Phases play one at a time · AI calls are billed'
               : 'Local policies · no cost'}
@@ -191,7 +220,7 @@ export function Playback({
         </div>
       </div>
       <div className="branch-actions">
-        <button className="button" disabled={cp.state.done || watching || busy} onClick={onBranch}>
+        <button className="button" disabled={cp.state.done || controlling || busy} onClick={onBranch}>
           <GitBranch size={16} />
           Try a different decision
         </button>
@@ -202,7 +231,7 @@ export function Playback({
             className="icon-button"
             title="Download the recorded game as JSON"
             aria-label="Export complete replay"
-            disabled={watching || busy}
+            disabled={controlling || busy}
             onClick={() => {
               window.location.href = `/api/matches/${match.id}/export`;
             }}

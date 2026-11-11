@@ -138,13 +138,16 @@ app.post('/api/matches/:id/extend', (req, res) => {
   const match = extendMatch(getMatch(req.params.id), input.maxPhases, input.budgetUsd);
   res.json(spectatorView(match));
 });
+const ticket = z.string().min(8).max(80).optional();
 app.post('/api/matches/:id/run', (req, res) => {
-  const { single } = z.object({ single: z.boolean().default(false) }).parse(req.body);
-  void startMatch(req.params.id, single);
+  const input = z.object({ single: z.boolean().default(false), ticket }).parse(req.body);
+  void startMatch(req.params.id, input.single, input.ticket);
   res.json(spectatorView(getMatch(req.params.id)));
 });
+// Idempotent and free. With the run's ticket it also cancels a run request that has not arrived yet.
 app.post('/api/matches/:id/pause', (req, res) => {
-  pauseMatch(req.params.id);
+  const input = z.object({ ticket }).parse(req.body ?? {});
+  pauseMatch(req.params.id, input.ticket);
   res.json({ ok: true, settling: isActive(req.params.id) });
 });
 app.post('/api/matches/:id/branch', async (req, res) => {

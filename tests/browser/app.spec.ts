@@ -1,8 +1,9 @@
 import { test, expect, type Page } from '@playwright/test';
+import { mockLiveCatalog } from './helpers';
 
 /**
  * The expert view (guided view off) keeps the detailed story, timeline controls, and the replay
- * timer. Guided behaviour has its own specs in journey.spec.ts and guided.spec.ts.
+ * timer. Guided and watch-session behaviour has its own spec in watch.spec.ts.
  */
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('seven-powers-guided', '0'));
@@ -296,6 +297,8 @@ test('click outside an open listbox closes it without changing the value', async
 });
 
 test('setup defaults to GLM 5.3 Flash, offers economical presets, and filters the model catalog', async ({ page }) => {
+  // The live setup needs a configured server; it is faked in the browser, so no key is needed.
+  await mockLiveCatalog(page);
   await page.goto('/');
   await setupButton(page).click();
   await page.getByText('Advanced: models, behaviour, and each country').click();
@@ -366,7 +369,9 @@ test('sandbox is labelled as free local policies: start game plays to the phase 
   // Start game plays on, one phase at a time, to the limit the viewer chose.
   await expect(page.locator('.timeline-labels')).toContainText('Moment 3 of 3', { timeout: 30_000 });
   await expect(page.locator('.end-screen')).toContainText('Stopped at the phase limit');
-  await expect(page.getByRole('button', { name: 'Game over' })).toBeDisabled();
+  // A finished game's primary control is a free recorded replay, never a request for more phases.
+  await expect(page.getByRole('button', { name: /^Replay recorded phases from the opening/ })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'The game is over: no further phases to play' })).toBeDisabled();
   await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: 'History', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'History', exact: true })).toBeVisible();
   await expect(page.getByRole('listitem').filter({ hasText: gameName })).toBeVisible();
@@ -384,6 +389,7 @@ test('opening the app never starts a model run or changes the record', async ({ 
 });
 
 test('mobile has no horizontal overflow, guidance stacks, and custom listboxes stay on screen', async ({ page }) => {
+  await mockLiveCatalog(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Europe, on the brink.' })).toBeVisible();

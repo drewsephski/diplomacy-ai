@@ -148,3 +148,27 @@ test('profile and diplomatic branches scope interventions to the selected countr
   assert.ok(updated.turns[0].messages.some((m) => m.round === -1 && m.to.length === 2));
   assert.equal(updated.intervention, undefined);
 });
+
+test('a pause that arrives before its run request cancels that run; a pause after it stops the job', async () => {
+  const m = await createMatch('ticket race', 'sandbox', undefined, { ...DEFAULT_LIMITS, maxPhases: 4 });
+  // Pause first (the run request is still in transit), then the late run with the same ticket.
+  pauseMatch(m.id, 'ticket-early-0001');
+  assert.throws(() => startMatch(m.id, true, 'ticket-early-0001'), /paused before it began/);
+  assert.equal(isActive(m.id), false);
+  assert.equal(getMatch(m.id).turns.length, 0);
+  // A different ticket is unaffected, and its own pause stops the job between steps.
+  const run = startMatch(m.id, false, 'ticket-later-0002');
+  pauseMatch(m.id, 'ticket-later-0002');
+  await run;
+  const after = getMatch(m.id);
+  assert.equal(after.status, 'paused');
+  assert.ok(after.turns.length <= 1);
+});
+
+test('pausing an idle game never hides an error or completion status', async () => {
+  const m = await createMatch('idle pause', 'sandbox', undefined, { ...DEFAULT_LIMITS, maxPhases: 1 });
+  await startMatch(m.id);
+  assert.equal(getMatch(m.id).status, 'complete');
+  pauseMatch(m.id, 'ticket-idle-0003');
+  assert.equal(getMatch(m.id).status, 'complete');
+});

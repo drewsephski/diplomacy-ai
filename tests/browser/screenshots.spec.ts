@@ -97,8 +97,41 @@ test('capture a guided card on a recorded phase', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('heading', { name: 'Europe, on the brink.' }).waitFor();
   await page.getByRole('button', { name: /Watch a labelled sample with a guide/ }).click();
+  await page.locator('.guide-card').waitFor();
   await page.waitForTimeout(400);
   await page.screenshot({ path: 'docs/guided-desktop.png' });
+
+  // Phone: the viewer is at the footer controls when they open the guide. The sheet appears on screen
+  // with the map above it.
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await page.getByRole('heading', { name: 'Europe, on the brink.' }).waitFor();
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await page.locator('.play-button').click();
+  await page.locator('.guide-card').waitFor();
+  await page.waitForTimeout(400);
   await page.screenshot({ path: 'docs/guided-mobile.png' });
+});
+
+test('capture a guided watch holding its first phase', async ({ page, request }) => {
+  await page.addInitScript(() => localStorage.setItem('seven-powers-guided', '1'));
+  const created = await request.post('/api/matches', {
+    data: { name: 'Guided watch', mode: 'sandbox', configs, limits: { maxPhases: 6, budgetUsd: 5, maxOutputTokens: 1800, diplomacyRounds: 2 } },
+  });
+  const { id } = await created.json();
+  await page.addInitScript((v) => localStorage.setItem('seven-powers-match', v), id);
+  await page.setViewportSize({ width: 1536, height: 1024 });
+  await page.goto('/');
+  await page.getByRole('button', { name: /^Play first phase/ }).click();
+  await page.locator('.guide-card').waitFor({ timeout: 20_000 });
+  for (let i = 0; i < 12 && !(await page.locator('.guide-next').count()); i++)
+    await page.locator('.guide-card').getByRole('button', { name: /^(Next event|Phase summary)/ }).click();
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: 'docs/guided-watch-desktop.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(400);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.waitForTimeout(200);
+  await page.screenshot({ path: 'docs/guided-watch-mobile.png' });
+  await page.locator('.play-button').click(); // Pause game
 });

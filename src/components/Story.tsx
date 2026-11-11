@@ -19,6 +19,7 @@ export interface StoryGuide {
   onOpen: () => void;
   /** Phases recorded since the viewer last finished one, with a start action. */
   ready?: { count: number; season: string; onStart: () => void };
+  /** The game is playing or a card is already open: the launch link is not offered. */
   disabled?: boolean;
 }
 
@@ -39,11 +40,20 @@ export function Story({
 }) {
   if (index === 0)
     return (
-      <Empty>
-        <b>Nothing has happened yet.</b>
-        <br />
-        Press Play or Play next phase to see what the first phase changes.
-      </Empty>
+      <>
+        <Empty>
+          <b>Nothing has happened yet.</b>
+          <br />
+          {match.turns.length > 0
+            ? 'This is the opening position. Step forward, or walk through the first recorded phase.'
+            : 'Press Play first phase to see what the first phase changes.'}
+        </Empty>
+        {guide && !guide.disabled && (
+          <button className="button guide-launch start" onClick={guide.onOpen}>
+            Walk through the first phase with a guide
+          </button>
+        )}
+      </>
     );
   const turnIndex = index - 1;
   const turn = match.turns[turnIndex];
@@ -74,8 +84,8 @@ export function Story({
         <span className="eyebrow">
           LAST PHASE · {phaseName(story.phase).toUpperCase()} {phaseKind(story.phase).toUpperCase()}
         </span>
-        {guide && (
-          <button className="text-button guide-launch" onClick={guide.onOpen} disabled={guide.disabled}>
+        {guide && !guide.disabled && (
+          <button className="text-button guide-launch" onClick={guide.onOpen}>
             Walk through this phase with a guide
           </button>
         )}

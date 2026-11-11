@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
+import { createPortal } from 'react-dom';
 import { ArrowLeft, ArrowRight, ChevronDown, ChevronUp, X } from 'lucide-react';
 import { NATIONS } from '../domain';
 import type { GuidedPhase } from '../guided/events';
@@ -6,43 +7,70 @@ import { termMeaning, splitTerms, type Term } from '../guided/glossary';
 import type { Match } from '../types';
 import { Crest } from './Shared';
 
+/**
+ * What the phase summary offers. It comes from the session's real state, so the card never says
+ * "nothing runs" while a game is about to continue, and never resumes billed play on Close.
+ */
+export type SummaryAction =
+  /** A watch session is holding this phase for the viewer. */
+  | { kind: 'continue-watching'; calls: number }
+  /** The held phase was the final one: the session ends when the viewer is done. */
+  | { kind: 'finish' }
+  /** Recorded replay with a later recorded phase. Never a model call. */
+  | { kind: 'next-recorded'; label: string }
+  /** Nothing is playing and this is the latest phase of an unfinished game. Explicit, labelled. */
+  | { kind: 'resume' }
+  | { kind: 'done' };
+
 export interface GuideCardProps {
   phase: GuidedPhase;
   step: number;
   mode: Match['mode'];
   complete: boolean;
-  /** The record has a later resolved phase to walk through. */
-  hasNext: boolean;
-  /** Live or sandbox at the edge, with nothing running: the next phase can be run. */
-  canRunNext: boolean;
-  nextLabel?: string;
+  action: SummaryAction;
+  /** Closing the card pauses an active watch session. Its labels say so. */
+  closePauses: boolean;
   onStep: (to: number) => void;
   onLocate: (code: string) => void;
   onContinue: () => void;
-  onRunNext: () => void;
+  onContinueWatching: () => void;
+  onResume: () => void;
   onClose: (finished: boolean) => void;
   onGuidanceOff: () => void;
 }
 
+const NARROW = '(max-width: 760px)';
+function subscribeNarrow(cb: () => void) {
+  const q = window.matchMedia(NARROW);
+  q.addEventListener('change', cb);
+  return () => q.removeEventListener('change', cb);
+}
+const isNarrow = () => window.matchMedia(NARROW).matches;
+
 /**
  * The guided walkthrough card. It is a non-modal dialog: the map and the rest of the page stay
  * reachable, Escape closes it, and focus returns to whatever opened it. One card at a time.
+ *
+ * On a phone it is a bottom sheet fixed to the viewport, so it is visible wherever the page was
+ * scrolled when it opened. The map is scrolled to the top of the screen above the sheet, so the
+ * focused province stays in view; the sheet's body scrolls, and its actions stay reachable.
  */
 export function GuideCard({
   phase,
   step,
   mode,
   complete,
-  hasNext,
-  canRunNext,
-  nextLabel,
+  action,
+  closePauses,
   onStep,
   onLocate,
   onContinue,
-  onRunNext,
+  onContinueWatching,
+  onResume,
   onClose,
   onGuidanceOff,
 }: GuideCardProps) {
+  const narrow = useSyncExternalStore(subscribeNarrow, isNarrow, () => false);
   const headingId = useId();
   const bodyId = useId();
   const heading = useRef<HTMLHeadingElement>(null);
@@ -53,9 +81,21 @@ export function GuideCard({
   const summary = !event;
 
   // Focus the card once when it opens for a phase, so keyboard and screen-reader users arrive at it.
+  // On a phone, first bring the map to the top of the screen, above the sheet.
   useEffect(() => {
+    if (narrow) {
+      const map = document.querySelector('.theater .europe-map');
+      if (map) window.scrollTo({ top: map.getBoundingClientRect().top + window.scrollY, behavior: 'instant' });
+    }
     heading.current?.focus({ preventScroll: true });
-  }, [phase.turn]);
+  }, [phase.turn, narrow]);
+
+  // While the sheet is open the page gets room below its content, so nothing is stuck under the sheet.
+  useEffect(() => {
+    if (!narrow) return;
+    document.documentElement.classList.add('guide-sheet-open');
+    return () => document.documentElement.classList.remove('guide-sheet-open');
+  }, [narrow]);
 
   // Each event zooms the map to its province, so the walkthrough and the board stay in step.
   useEffect(() => {
@@ -79,9 +119,10 @@ export function GuideCard({
     ? `${season} · phase summary`
     : `${season} · Event ${step + 1} of ${total}`;
 
-  return (
+  const closeLabel = closePauses ? 'Pause and close guide' : 'Close guide';
+  const card = (
     <section
-      className={`guide-card ${collapsed ? 'collapsed' : ''} ${summary ? 'summary' : ''}`}
+      className={`guide-card ${narrow ? 'sheet' : ''} ${collapsed ? 'collapsed' : ''} ${summary ? 'summary' : ''}`}
       role="dialog"
       aria-modal="false"
       aria-labelledby={headingId}
@@ -104,7 +145,7 @@ export function GuideCard({
           >
             {collapsed ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
           </button>
-          <button type="button" className="icon-button" aria-label="Close the guide" onClick={() => onClose(false)}>
+          <button type="button" className="icon-button" aria-label={closePauses ? 'Pause the game and close the guide' : 'Close the guide'} onClick={() => onClose(summary)}>
             <X size={17} />
           </button>
         </div>
@@ -192,15 +233,7 @@ export function GuideCard({
                 </ul>
               </>
             )}
-            <p className="guide-next">
-              {hasNext
-                ? `Next: ${nextLabel ?? 'the following phase'}, from the recorded history.`
-                : mode === 'sample'
-                  ? 'This is the end of the recorded sample.'
-                  : complete
-                    ? 'The match is complete.'
-                    : 'Nothing runs until you choose. Agent calls are billed and shown in the status bar.'}
-            </p>
+            <p className="guide-next">{nextText(action, mode, complete)}</p>
           </>
         )}
         <p className="guide-term" aria-live="polite">
@@ -227,20 +260,37 @@ export function GuideCard({
               <button type="button" className="button ghost" onClick={() => onStep(0)}>
                 Replay this phase
               </button>
-              {hasNext ? (
+              {action.kind === 'continue-watching' ? (
+                <button type="button" className="button primary" onClick={onContinueWatching}>
+                  Continue watching <ArrowRight size={15} />
+                </button>
+              ) : action.kind === 'finish' ? (
+                <button type="button" className="button primary" onClick={onContinueWatching}>
+                  See the result <ArrowRight size={15} />
+                </button>
+              ) : action.kind === 'next-recorded' ? (
                 <button type="button" className="button" onClick={onContinue}>
                   Continue <ArrowRight size={15} />
                 </button>
-              ) : canRunNext ? (
-                <button
-                  type="button"
-                  className="button"
-                  onClick={onRunNext}
-                  aria-label={mode === 'live' ? 'Run next phase with live agents (billed model calls)' : 'Run next sandbox phase'}
-                >
-                  {mode === 'live' ? 'Run next phase · billed' : 'Run next sandbox phase'} <ArrowRight size={15} />
+              ) : action.kind === 'resume' ? (
+                <>
+                  <button type="button" className="button ghost" onClick={() => onClose(true)}>
+                    Done
+                  </button>
+                  <button
+                    type="button"
+                    className="button"
+                    onClick={onResume}
+                    aria-label={mode === 'live' ? 'Resume game: keep playing from here (billed model calls)' : 'Resume game: keep playing from here (free sandbox)'}
+                  >
+                    {mode === 'live' ? 'Resume game · billed' : 'Resume game (free)'} <ArrowRight size={15} />
+                  </button>
+                </>
+              ) : (
+                <button type="button" className="button" onClick={() => onClose(true)}>
+                  Done
                 </button>
-              ) : null}
+              )}
             </div>
           )}
           <div className="guide-secondary">
@@ -249,17 +299,41 @@ export function GuideCard({
                 Skip to phase summary
               </button>
             )}
-            <button type="button" className="text-button" onClick={() => onClose(false)}>
-              Close guide
+            <button type="button" className="text-button" onClick={() => onClose(summary)}>
+              {closeLabel}
             </button>
             <button type="button" className="text-button" onClick={onGuidanceOff}>
-              Turn guidance off
+              {closePauses ? 'Turn guidance off and pause' : 'Turn guidance off'}
             </button>
           </div>
         </footer>
       )}
     </section>
   );
+  return narrow ? createPortal(card, document.body) : card;
+}
+
+function nextText(action: SummaryAction, mode: Match['mode'], complete: boolean) {
+  switch (action.kind) {
+    case 'continue-watching':
+      return mode === 'live'
+        ? `The next phase waits until you press Continue watching. It makes up to ${action.calls} billed model calls.`
+        : 'The next phase waits until you press Continue watching. Sandbox phases are free.';
+    case 'finish':
+      return 'This was the final phase of the game. Nothing else will be played.';
+    case 'next-recorded':
+      return `Next: ${action.label}, from the recorded history. No model calls.`;
+    case 'resume':
+      return mode === 'live'
+        ? 'This is the latest phase. Nothing plays until you press Resume game, and each phase makes billed model calls.'
+        : 'This is the latest phase. Nothing plays until you press Resume game.';
+    case 'done':
+      return mode === 'sample'
+        ? 'This is the end of the recorded sample.'
+        : complete
+          ? 'This is the end of the record. The game is over.'
+          : 'Nothing is playing.';
+  }
 }
 
 /** Copy with the game's words made tappable. Tapping a word shows its rule in the card's word line. */

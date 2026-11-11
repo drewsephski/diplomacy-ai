@@ -1,0 +1,113 @@
+[
+  {
+    "name": "R7 live/sandbox phase arrival does not open a guide card automatically",
+    "reproduced": true,
+    "detail": {
+      "guideCardsOpenAfterPhase": 0
+    }
+  },
+  {
+    "name": "R3 status line while reading says \"Playing · the next phase starts in a moment\"",
+    "reproduced": true,
+    "detail": {
+      "status": "Playing · the next phase starts in a moment"
+    }
+  },
+  {
+    "name": "reading pause holds while card open (expected behaviour)",
+    "reproduced": true,
+    "detail": {
+      "runsDuringReading": 0
+    }
+  },
+  {
+    "name": "R1 opening Help while reading closes the guide and resumes paid play behind the modal",
+    "reproduced": true,
+    "detail": {
+      "runsWhileHelpOpen": 2,
+      "helpDialogOpen": 1
+    }
+  },
+  {
+    "name": "R2 Messages tab keeps the watch session requesting phases while the board is hidden",
+    "reproduced": true,
+    "detail": {
+      "runsOnMessagesTab": 2
+    }
+  },
+  {
+    "name": "R9 seeking to an earlier moment keeps requesting phases while viewer looks back",
+    "reproduced": true,
+    "detail": {
+      "runsAfterSeek": 2,
+      "at": 0,
+      "of": 6,
+      "status": "Playing · a phase is in progress"
+    }
+  },
+  {
+    "name": "R11 summary during watch claims \"Nothing runs until you choose\" yet closing resumes play; banner stays",
+    "reproduced": true,
+    "detail": {
+      "summaryNext": "Nothing runs until you choose. Agent calls are billed and shown in the status bar.",
+      "footButtons": [
+        "Replay this phase",
+        "Close guide",
+        "Turn guidance off"
+      ],
+      "readyBannerAfterClose": 1
+    }
+  },
+  {
+    "name": "R5 Pause during an in-flight /run sends no /pause; the full phase still resolves",
+    "reproduced": true,
+    "detail": {
+      "labelWhenPausing": "Pause game",
+      "runRequests": 1,
+      "pauseRequests": 0,
+      "turnsResolvedAfterPause": 1
+    }
+  },
+  {
+    "name": "R4 opening a saved game from History resumes its old watch session without Resume",
+    "reproduced": true,
+    "detail": {
+      "runsAfterOpening": 2,
+      "turnsBefore": 1,
+      "turnsAfter": 3,
+      "status": "Playing · the next phase starts in a moment"
+    }
+  },
+  {
+    "name": "R8 dismissing Setup during Start still creates, runs, and keeps watching",
+    "reproduced": true,
+    "detail": {
+      "dialogsOpen": 0,
+      "runRequests": 2,
+      "games": [
+        {
+          "name": "My Seven Powers game",
+          "phases": 2
+        }
+      ],
+      "status": "Playing · the next phase starts in a moment"
+    }
+  },
+  {
+    "name": "R6 History \"From the start\" gives no replay control for a person's game",
+    "reproduced": true,
+    "detail": {
+      "finished": {
+        "label": "Game over",
+        "disabled": true
+      },
+      "storyAtStart": "Nothing has happened yet. Press Play or Play next phase to see what the first phase changes.",
+      "guideLaunchVisible": 0,
+      "paused": {
+        "label": "Resume game",
+        "aria": "Resume game: jump to the latest phase and keep playing"
+      },
+      "runRequests": 0
+    }
+  }
+]

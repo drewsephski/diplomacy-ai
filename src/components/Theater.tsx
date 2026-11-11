@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ArrowRight } from 'lucide-react';
-import { NATIONS, modelLabel, phaseName } from '../domain';
+import { NATIONS, modelLabel } from '../domain';
 import type { GuidedPhase } from '../guided/events';
 import { outcomeOf } from '../guided/outcome';
 import { POWERS, type Match, type Power } from '../types';
@@ -10,7 +10,9 @@ import { Orientation } from './Orientation';
 import { PhaseGuide, WatchNext } from './PhaseGuide';
 import { Story, type StoryGuide } from './Story';
 import { Crest, DispatchCard, Empty } from './Shared';
-import { GuideCard, type GuideCardProps } from './GuideCard';
+import { GuideCard, type GuideCardProps, type SummaryAction } from './GuideCard';
+
+export type { SummaryAction };
 
 export interface GuideView {
   /** The walkthrough for the open phase, when the guide is open. */
@@ -20,6 +22,10 @@ export interface GuideView {
   /** Phases recorded since the viewer last finished one. */
   pending: number;
   pendingSeason?: string;
+  /** What the phase summary offers, from the session's real state. */
+  summaryAction: SummaryAction;
+  /** A watch session is active: closing the card pauses the game. */
+  closePauses: boolean;
 }
 
 export interface GuideActions {
@@ -27,7 +33,8 @@ export interface GuideActions {
   step: (to: number) => void;
   close: (finished?: boolean) => void;
   continueNext: () => void;
-  runNext: () => void;
+  continueWatching: () => void;
+  resume: () => void;
   guidanceOff: () => void;
   locate: (code: string) => void;
 }
@@ -44,6 +51,7 @@ interface TheaterProps {
   showOrientation: boolean;
   sampleAvailable: boolean;
   endBusy: boolean;
+  pausing: boolean;
   onSelect: (p: Power) => void;
   onLocate: (code: string) => void;
   onDossier: () => void;
@@ -75,17 +83,16 @@ export function Theater(props: TheaterProps) {
   const highlight = guide.open && guide.phase ? guide.phase.events[guide.step]?.highlight ?? [] : [];
   const sampleEnd = atEdge && match.mode === 'sample' && match.status === 'complete';
 
-  const story: StoryGuide | undefined = guided && index > 0
-    ? {
-        onOpen: () => actions.open(index - 1, 0),
-        disabled: watching,
-        ready:
-          guide.pending > 0 && !guide.open && match.mode !== 'sample'
-            ? { count: guide.pending, season: guide.pendingSeason ?? 'The latest phase', onStart: () => actions.open(match.turns.length - guide.pending, 0) }
-            : undefined,
-      }
-    : guided && index === 0
-      ? { onOpen: () => actions.open(0, 0), disabled: watching }
+  const story: StoryGuide | undefined =
+    guided && match.turns.length > 0
+      ? {
+          onOpen: () => actions.open(index > 0 ? index - 1 : 0, 0),
+          disabled: watching || guide.open,
+          ready:
+            guide.pending > 0 && !guide.open && !watching && match.mode !== 'sample'
+              ? { count: guide.pending, season: guide.pendingSeason ?? 'The latest phase', onStart: () => actions.open(match.turns.length - guide.pending, 0) }
+              : undefined,
+        }
       : undefined;
 
   const cardProps: GuideCardProps | undefined =
@@ -95,13 +102,13 @@ export function Theater(props: TheaterProps) {
           step: guide.step,
           mode: match.mode,
           complete: finished,
-          hasNext: guide.phase.turn + 1 < match.turns.length,
-          canRunNext: atEdge && match.mode !== 'sample' && !watching && !finished && match.turns.length > 0 && guide.phase.turn + 1 === match.turns.length,
-          nextLabel: guide.phase.turn + 1 < match.turns.length ? phaseName(match.turns[guide.phase.turn + 1].phase) : undefined,
+          action: guide.summaryAction,
+          closePauses: guide.closePauses,
           onStep: actions.step,
           onLocate: actions.locate,
           onContinue: actions.continueNext,
-          onRunNext: actions.runNext,
+          onContinueWatching: actions.continueWatching,
+          onResume: actions.resume,
           onClose: actions.close,
           onGuidanceOff: actions.guidanceOff,
         }
@@ -130,7 +137,7 @@ export function Theater(props: TheaterProps) {
             onBranch={props.onBranch}
           />
         ) : (
-          <PhaseGuide match={match} index={index} running={match.status === 'running'} pauseRequested={false} onLiveEdge={props.onLiveEdge} />
+          <PhaseGuide match={match} index={index} running={match.status === 'running'} pauseRequested={props.pausing} onLiveEdge={props.onLiveEdge} />
         )}
       </div>
       <aside className="powers-panel" aria-label="The seven countries">

@@ -243,19 +243,35 @@ export async function resolvePhase(match: Match) {
   saveMatch(match);
 }
 const active = new Map<string, { pause: boolean; promise: Promise<void> }>();
+/**
+ * Start tickets the viewer has already paused. A client sends a fresh ticket with every run request
+ * and the same ticket with its pause. If the pause reaches the server first (the run request is still
+ * in transit), the late run is refused instead of playing a whole phase after Pause. Bounded, in memory.
+ */
+const cancelledTickets = new Set<string>();
+const TICKET_MEMORY = 500;
 export function isActive(id: string) {
   return active.has(id);
 }
-export function pauseMatch(id: string) {
+export function pauseMatch(id: string, ticket?: string) {
+  if (ticket) {
+    cancelledTickets.add(ticket);
+    if (cancelledTickets.size > TICKET_MEMORY) cancelledTickets.delete(cancelledTickets.values().next().value!);
+  }
   const job = active.get(id);
   if (job) job.pause = true;
   else {
     const match = getMatch(id);
-    if (match.status !== 'complete') match.status = 'paused';
-    saveMatch(match);
+    // A stopped-by-error or complete game keeps its status; only an idle game is marked paused.
+    if (match.status === 'running') {
+      match.status = 'paused';
+      saveMatch(match);
+    }
   }
 }
-export function startMatch(id: string, single = false): Promise<void> {
+export function startMatch(id: string, single = false, ticket?: string): Promise<void> {
+  if (ticket && cancelledTickets.has(ticket))
+    throw Object.assign(new Error('This start was paused before it began. Nothing was played.'), { status: 409 });
   if (active.has(id)) throw new Error('This match is already running.');
   // Shared provider key: only one live job at a time, keeping billing and controls predictable.
   if (active.size) throw new Error('Pause the running match before starting another.');
