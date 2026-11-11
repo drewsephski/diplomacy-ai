@@ -2,7 +2,54 @@
 
 > **Archive note.** The saved archive records named in the sections below (the live proof runs, “A continent of possibilities”, the three-model runs, and the earlier sandbox records) were deleted from the local database at the owner's request. Their results are kept here as history only; they can no longer be opened in History. The local database now holds only the labelled sample, *The fragile peace*.
 
-## Current verification: watch-session remediation
+## Current verification: observer experience
+
+November 11, 2026, local macOS, Chromium only, against an isolated build (port 3012, a fresh temporary database, `OPENROUTER_API_KEY` set to an empty string). No paid model call was made and no paid validation is claimed.
+
+### What changed
+
+- **One way in.** The first-visit welcome (*You watch. Seven independent countries decide. Nothing waits for your orders.*) offers **Watch the first negotiation**: the 11-phase sample (edition 2) at moment 0, following France, walking Spring 1901 as beats: stakes → talks → one question with an optional local guess → sealed → reveal → events → summary with answers and a supported *What if?*.
+- **The moment rule everywhere.** At moment *i* talks of phases up to *i* are visible, orders and outcomes only for phases before *i*; commitments of phase *i* read *sealed*. Country details, Conversations, Timeline, Compared with history, and the comparison follow it (`src/conversations.ts`, `src/moment.ts`).
+- **Conversations** replace the mixed message feed; the Watch stage has a Follow rail, a Talks / What happened panel, and on phones a menu sheet, Story · Talks · Country tabs, and a fixed dock that the guide sheet replaces while open.
+- **What if?** opens prefilled at the checkpoint before the decision, says what changes and what the original record shows, and states each continuation's limits; the sandbox does not offer messages because it never reads them. The server stores the question and the change on the alternate timeline; the comparison shows them with the shared past and the first phase played differently.
+
+### Bugs found in verification and fixed
+
+- **Sideways overflow at 761–1099px.** The playback bar's extras pushed the page to 1105px wide. The timeline and extras now take their own row at those widths (`src/stage.css`).
+- **Guide card under the playback bar on desktop.** With the welcome panel open, the card over the map extended below the screen (bottom at 1075px of 1024), hiding its actions. The welcome now steps aside while a walkthrough is open (`src/components/Theater.tsx`).
+- **Small touch targets in the phone sheet.** *Skip to phase summary* and *Close guide* were 40px tall; now 44px (`src/stage.css`).
+- **Watch for ignored the followed country.** The card asked about Russia while the walkthrough, following France, asked about France's promise. `questionsAt` now receives the followed country (`src/components/Theater.tsx`).
+
+### Automated checks
+
+| Check | Result |
+|---|---|
+| `pnpm lint` (`eslint .` and `ruff check engine`) | Exit 0 |
+| `pnpm typecheck` | Exit 0 |
+| `pnpm test` | 114 of 114 TypeScript tests (including `tests/moment.test.ts`, which scans earlier moments for later facts), 10 of 10 Python |
+| `pnpm build` | Exit 0 |
+| `pnpm test:browser` | 99 passed, 4 documentation captures skipped (run separately). `journey.spec.ts` and `layout.spec.ts` repeated twice: 36 of 36 |
+| Documentation captures (`CAPTURE_SCREENSHOTS=1`) | 4 of 4 pass; images regenerated and inspected |
+
+New browser coverage (`tests/browser/journey.spec.ts`): the beginner journey at 1536, 360, 390, and 430px from the welcome through France's broken promise, Russia and Turkey's kept-but-bounced promises, the summary with answers and *You guessed yes*, the prefilled What-if dialog with the sandbox caveat, to the comparison showing the question and the change, with no run request; a played alternate timeline compared with its original and *Open the original at the branch moment*; a quiet phase (Spring 1903) in two beats; bilateral and group threads (the group keeps its three participants) with a recorded reply link; sealed commitments at moment 0 and revealed ones at moment 1 in Conversations and country details; pause, resume, and a request-free replay on a sandbox game; loading, empty, and error states; a one-finger swipe over the map scrolling the page; the guide by keyboard with a visible focus ring; reduced motion with no unit travel or animation; and no billing across a whole session and reload. The existing specs were updated for the new labels and layout without weakening their watch-session and billing assertions; the phone layout test now checks that the guide sheet replaces the dock, stays within half the screen, keeps the focused province above it, collapses to a peek bar, and gives the dock back on close.
+
+### Visual checks
+
+Regenerated and inspected at 390×844: `docs/mobile.png` (welcome), `docs/guided-mobile.png` (stakes), `docs/mobile-talks.png`, `docs/mobile-reveal.png`, `docs/mobile-broken-promise.png`, `docs/mobile-whatif.png`, `docs/mobile-conversations.png`, `docs/guided-watch-mobile.png`, `docs/history-mobile.png`, `docs/setup-mobile.png`. At 1536×1024: `docs/desktop.png`, `docs/guided-desktop.png`, `docs/reveal-desktop.png`, `docs/summary-desktop.png`, `docs/whatif-desktop.png`, `docs/comparison-desktop.png`, `docs/conversations-desktop.png`, `docs/guided-watch-desktop.png`, `docs/history-desktop.png`, `docs/setup-*.png`.
+
+Noted, not changed:
+
+- *What happened* lists Russia's and Turkey's kept-but-failed Black Sea promises as two moments, while the walkthrough tells them as one event.
+- The Britain–France row in Conversations reports *2 open* even though Britain accepted France's proposal; the open points come from the conversation derivation and were not re-examined here.
+- Story moment body text is 13px on desktop, below the 14px target used for the guide and conversations.
+
+### Not verified
+
+Live multi-phase play with real models, browsers other than Chromium, real touch hardware (touch was emulated through the Chrome DevTools protocol), and screen readers.
+
+---
+
+## Previous verification: watch-session remediation
 
 Final review follow-up (November 11, 2026): the independent Opus recheck confirmed all 14 original findings resolved and reproduced the full suite (83 browser tests passed, 3 optional captures skipped; 69 TypeScript and 10 Python tests passed). Its one new low-severity overlapping-start defect was subsequently fixed by the parent agent. After that fix, lint, type checking, the 69 TypeScript and 10 Python tests, and the production build passed again. Both new overlapping-start browser regressions and the strengthened delayed-response Pause test passed three times each (9/9). These focused final checks used a fresh temporary store and a blank provider key; the full browser suite was not rerun after the small final fix. See [the recheck and follow-up](review/recheck.md).
 

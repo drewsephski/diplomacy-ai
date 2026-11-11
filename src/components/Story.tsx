@@ -134,7 +134,7 @@ export function Story({
               )}
               {(m.tone === 'broken' || m.tone === 'kept-failed') && (
                 <button className="text-button" onClick={onDiplomacy}>
-                  Read the messages
+                  Read the talks
                 </button>
               )}
             </div>

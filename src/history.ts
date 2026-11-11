@@ -43,6 +43,8 @@ export function summarizeMatch(match: Match, knownIds?: Set<string>): MatchSumma
     parent: match.parent ? { ...match.parent } : undefined,
     parentMissing,
     result: resultOf(match),
+    // A sample record written before editions were numbered is the first edition.
+    ...(match.mode === 'sample' ? { sampleVersion: match.sampleVersion ?? 1 } : {}),
     calls: match.usage.calls,
     costUsd: match.mode === 'live' ? match.usage.estimatedUsd : 0,
   };

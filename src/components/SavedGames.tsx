@@ -28,7 +28,12 @@ export function SavedGames({
   onOpenSample: () => void;
   onDelete: (game: MatchSummary) => Promise<void>;
 }) {
-  const sample = games.find((g) => g.mode === 'sample');
+  // The newest edition of the authored sample is the one offered to newcomers; older editions stay
+  // listed (alternate timelines may compare against them) and are labelled as earlier editions.
+  const samples = games.filter((g) => g.mode === 'sample');
+  const newest = Math.max(0, ...samples.map((g) => g.sampleVersion ?? 1));
+  const sample = samples.find((g) => (g.sampleVersion ?? 1) === newest) ?? samples[0];
+  const earlier = samples.filter((g) => g !== sample);
   const mine = games.filter((g) => g.mode !== 'sample');
   const [confirming, setConfirming] = useState<MatchSummary>();
 
@@ -81,12 +86,15 @@ export function SavedGames({
                   </div>
                   <p className={`saved-result tone-${r.tone}`}>{r.title}</p>
                   {g.parent && (
-                    <p className="saved-lineage">
-                      <GitBranch size={12} aria-hidden="true" />
-                      {g.parentMissing
-                        ? `Alternate timeline from moment ${g.parent.at}. Its original game was deleted, so the side-by-side comparison is unavailable.`
-                        : `Alternate timeline from “${g.parent.name}” at moment ${g.parent.at}`}
-                    </p>
+                    <>
+                      {g.parent.question && <p className="saved-question">{g.parent.question}</p>}
+                      <p className="saved-lineage">
+                        <GitBranch size={12} aria-hidden="true" />
+                        {g.parentMissing
+                          ? `Alternate timeline from moment ${g.parent.at}. Its original game was deleted, so the side-by-side comparison is unavailable.`
+                          : `Alternate timeline from “${g.parent.name}” at moment ${g.parent.at}`}
+                      </p>
+                    </>
                   )}
                 </div>
                 <div className="saved-actions">
@@ -131,6 +139,30 @@ export function SavedGames({
             Open sample <ArrowRight size={14} />
           </button>
         </div>
+      )}
+
+      {earlier.length > 0 && (
+        <details className="saved-earlier">
+          <summary>
+            {earlier.length === 1 ? 'An earlier edition of the sample' : `${earlier.length} earlier editions of the sample`}
+          </summary>
+          <p className="muted small-copy">
+            Kept so alternate timelines made from them can still be compared. The current sample above is the one to watch.
+          </p>
+          <ul>
+            {earlier.map((g) => (
+              <li key={g.id}>
+                <span>
+                  <strong>{g.name.replace(/ · earlier edition.*$/, '')}</strong> · earlier edition {g.sampleVersion ?? 1} ·{' '}
+                  {g.phases} recorded phases
+                </span>
+                <button className="text-button" onClick={() => onOpen(g.id)} disabled={busy} aria-label={`Open ${g.name}`}>
+                  Open <ArrowRight size={13} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
 
       {confirming && (

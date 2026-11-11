@@ -1,0 +1,448 @@
+/*
+ * What-if dialog, alternate-timeline comparison, and country details at the viewed moment.
+ * Reading surfaces use at least 14px on desktop and 15px on phones; controls are at least 44px tall.
+ * Tokens come from src/styles.css (:root).
+ */
+
+/* ---------- Shared readings ---------- */
+.plain-order {
+  color: #e6dfcc;
+}
+.exact-order {
+  display: block;
+  margin-top: 2px;
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  font-size: 12px;
+  color: #b9a77e;
+}
+.moment-note {
+  margin: 0 32px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* ---------- Who is this (inside country details) ---------- */
+.who-is-panel {
+  margin: 0 32px;
+  padding: 16px 0 4px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: #d9d2bf;
+}
+.who-is-panel h3 {
+  margin-bottom: 6px;
+  color: var(--gold);
+  font-size: 13px;
+  letter-spacing: 0.4px;
+}
+.who-is-panel p {
+  margin: 4px 0 0;
+}
+.who-is-panel .guide-subhead {
+  margin: 12px 0 4px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #c9ccb9;
+}
+.who-is-panel .who-is-moments .text-button {
+  min-height: 44px;
+  font-size: 14px;
+}
+
+/* ---------- Country details body ---------- */
+.dossier-tabs button {
+  min-height: 44px;
+}
+.dossier-body p,
+.dossier-body .empty-state {
+  font-size: 14px;
+  line-height: 1.6;
+}
+.dossier-body .empty-state {
+  font: italic 19px/1.45 var(--serif);
+}
+.dossier-body .small-copy {
+  font-size: 13px;
+}
+.dossier-body h3 {
+  font-size: 14px;
+}
+.dossier-body .relations > div {
+  font-size: 14px;
+}
+.dossier-body .relations b {
+  font-size: 13px;
+}
+.dossier-body .memory-note {
+  font-size: 14px;
+  line-height: 1.65;
+}
+.moment-section + .moment-section {
+  margin-top: 26px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+.plain-orders {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--border);
+}
+.plain-orders li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+.plain-orders li > span:nth-child(2) {
+  font-size: 13px;
+  text-align: right;
+}
+.plain-orders .exact-order {
+  grid-column: 1 / -1;
+}
+.promise-card.sealed {
+  border-color: #c7aa7440;
+  border-style: dashed;
+}
+.promise-card .plain-order {
+  font-size: 14px;
+}
+.promise-plain {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0;
+  font-size: 14px;
+}
+.promise-plain > div {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  gap: 10px;
+}
+.promise-plain dt {
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  padding-top: 2px;
+}
+.promise-plain dd {
+  margin: 0;
+  color: #e6dfcc;
+}
+.dossier-thread {
+  margin-top: 18px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.dossier-thread h4 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 0 0 8px;
+  font: 500 19px/1.25 var(--serif);
+  color: #efe6cf;
+}
+.dossier-thread h4 small {
+  font: 12px 'Inter Variable', sans-serif;
+  color: var(--muted);
+}
+.dossier-thread ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+.thread-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.dossier-body .thread-summary {
+  margin-top: 4px;
+  color: #e6dfcc;
+}
+.dossier-thread blockquote {
+  margin: 4px 0 0;
+  padding-left: 12px;
+  border-left: 1px solid #c7aa7455;
+  font: italic 18px/1.4 var(--serif);
+  color: #cfc8b4;
+}
+.commitment {
+  font-size: 13px;
+}
+.dossier-body p.commitment.sealed {
+  color: #c9b893;
+}
+.dossier-body p.commitment.kept {
+  color: #93b29a;
+}
+.dossier-body p.commitment.broken {
+  color: #d18b7e;
+}
+
+/* ---------- What-if dialog ---------- */
+.whatif-form .modal-lede {
+  font-size: 15px;
+  line-height: 1.55;
+}
+.whatif-form .branch-checkpoint span,
+.whatif-form .branch-context p,
+.whatif-form .branch-context li {
+  font-size: 13px;
+}
+.whatif-form .branch-context code {
+  font-size: 12px;
+}
+.whatif-form .small-copy {
+  font-size: 13px;
+  line-height: 1.55;
+}
+.branch-spoiler summary {
+  cursor: pointer;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  color: #c9b893;
+}
+.whatif-compare {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  margin: 0 0 16px;
+}
+.whatif-compare > div {
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 14px 16px;
+  background: #0f171c;
+}
+.whatif-compare > div:first-child {
+  border-color: #c7aa7470;
+}
+.whatif-compare p {
+  margin-top: 6px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: #e6dfcc;
+}
+.whatif-compare .whatif-exact,
+.whatif-compare .info-note,
+.whatif-compare > .text-button {
+  grid-column: 1 / -1;
+}
+.whatif-compare .whatif-exact {
+  font-size: 13px;
+  color: var(--muted);
+}
+.whatif-compare > .text-button,
+.whatif-actions .text-button {
+  min-height: 44px;
+  font-size: 14px;
+  justify-self: start;
+}
+.whatif-kinds button {
+  min-height: 44px;
+  font-size: 13px;
+}
+.whatif-modes {
+  border: 0;
+  margin: 18px 0 12px;
+  padding: 0;
+  min-width: 0;
+}
+.whatif-modes legend {
+  padding: 0;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: #c9ccb9;
+}
+.whatif-modes .mode-options button {
+  min-height: 44px;
+}
+.whatif-modes .mode-options strong {
+  font-size: 14px;
+}
+.whatif-modes .mode-options span {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ---------- Comparison page ---------- */
+.whatif-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px 24px;
+  align-items: start;
+  margin: 0 0 26px;
+  padding: 18px 20px;
+  border: 1px solid #c7aa7450;
+  background: #0f171c;
+}
+.whatif-change p {
+  margin-top: 6px;
+  font: 500 21px/1.35 var(--serif);
+  color: #efe6cf;
+}
+.whatif-change small {
+  display: block;
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.whatif-actions {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+.whatif-actions .button {
+  min-height: 44px;
+}
+.comparison-block {
+  margin: 0 0 28px;
+}
+.comparison-block h2 {
+  font-size: 26px;
+  margin-bottom: 10px;
+  color: #efe6cf;
+}
+.comparison-block p,
+.comparison-block li {
+  font-size: 14px;
+  line-height: 1.55;
+}
+.shared-past {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 4px;
+  color: #cfd3cb;
+}
+.side-by-side {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+.side-by-side > article,
+.side-by-side > div {
+  border: 1px solid var(--border);
+  padding: 14px 16px;
+  background: #0f171c;
+  min-width: 0;
+}
+.side-by-side > .alternate {
+  border-color: #c7aa7470;
+}
+.side-by-side h3 {
+  margin: 6px 0;
+  font: 500 19px/1.3 var(--serif);
+  color: #efe6cf;
+}
+.side-by-side.compact > div {
+  padding: 10px 12px;
+}
+.side-by-side.compact p {
+  margin-top: 4px;
+}
+.cmp-sub {
+  margin: 20px 0 8px;
+  font-size: 14px;
+  color: #c9ccb9;
+}
+.order-diffs,
+.center-diffs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+.order-diff-who {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 14px;
+  color: #e6dfcc;
+}
+.comparison-table > div {
+  font-size: 14px;
+}
+.comparison-table > div:first-child {
+  font-size: 12px;
+}
+
+/* ---------- Timeline and history labels ---------- */
+.chronicle-spoilers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 16px;
+  margin: 0 0 12px;
+}
+.chronicle-spoilers .small-copy {
+  font-size: 13px;
+}
+.chronicle-spoilers .text-button {
+  min-height: 44px;
+  font-size: 13px;
+}
+.chronicle-entry.later h2 {
+  color: #8f9a9e;
+}
+.history-when {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+  letter-spacing: 0.2px;
+}
+
+@media (max-width: 760px) {
+  .moment-note,
+  .who-is-panel {
+    margin: 0 16px;
+  }
+  .who-is-panel,
+  .dossier-body p,
+  .dossier-body .relations > div,
+  .plain-orders li,
+  .promise-plain,
+  .whatif-compare p,
+  .comparison-block p,
+  .comparison-block li,
+  .comparison-table > div {
+    font-size: 15px;
+  }
+  .dossier-body .relations > div {
+    grid-template-columns: 25px minmax(0, 1fr) 70px 40px;
+    gap: 10px;
+  }
+  .whatif-compare,
+  .whatif-summary,
+  .side-by-side,
+  .whatif-modes .mode-options {
+    grid-template-columns: 1fr;
+  }
+  .whatif-form .modal-lede {
+    font-size: 15px;
+  }
+  .comparison-table > div {
+    grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+}
+.whatif-kinds + .small-copy {
+  margin: 6px 0 12px;
+}

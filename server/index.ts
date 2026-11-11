@@ -6,8 +6,8 @@ import { POWERS } from '../src/types.js';
 import { cleanGuidance, GUIDANCE_LIMITS } from '../src/domain.js';
 import { getMatch, listMatches } from './store.js';
 import {
-  buildSample,
   createMatch,
+  ensureSample,
   DEFAULT_LIMITS,
   extendMatch,
   forkMatch,
@@ -19,6 +19,7 @@ import {
 } from './simulation.js';
 import { spectatorView } from './privacy.js';
 import { getModels } from './provider.js';
+import { SAMPLE_VERSION } from './sample-agent.js';
 const app = express();
 app.disable('x-powered-by');
 app.use(express.json({ limit: '256kb' }));
@@ -163,6 +164,7 @@ app.post('/api/matches/:id/branch', async (req, res) => {
         to: z.array(z.enum(POWERS)).min(1).max(6).optional(),
         profile: profile.optional(),
       }),
+      question: z.string().max(200).optional(),
     })
     .parse(req.body);
   if (input.mode === 'live' && !process.env.OPENROUTER_API_KEY)
@@ -179,6 +181,7 @@ app.post('/api/matches/:id/branch', async (req, res) => {
           input.intervention,
           input.mode,
           input.limits,
+          input.question,
         ),
       ),
     );
@@ -201,10 +204,10 @@ app.use(
       .json({ error: message });
   },
 );
-if (!listMatches().some((m) => m.mode === 'sample')) {
+// Builds the current edition of the authored sample when it is missing; older editions are kept and renamed.
+if (!listMatches().some((m) => m.mode === 'sample' && m.sampleVersion === SAMPLE_VERSION))
   console.log('Preparing engine-adjudicated sample replay…');
-  await buildSample();
-}
+await ensureSample();
 const port = Number(process.env.PORT || 3001);
 app.listen(port, '127.0.0.1', () =>
   console.log(`Seven Powers API listening on http://127.0.0.1:${port}`),

@@ -13,6 +13,7 @@ import {
   openFromHistory,
   playSandbox,
   primary,
+  samplePhases,
   settle,
   statusLine,
   trackTraffic,
@@ -35,7 +36,7 @@ async function readToSummary(page: Page) {
   const card = guideCard(page);
   for (let i = 0; i < 12; i++) {
     if (await card.locator('.guide-next').count()) return;
-    await card.getByRole('button', { name: /^(Next event|Phase summary)/ }).click();
+    await card.getByRole('button', { name: /^(Next|Reveal the orders|Phase summary)\s*$/ }).click();
   }
   throw new Error('The card never reached its summary');
 }
@@ -143,8 +144,8 @@ test('guided Start game: the first phase opens by itself, holds, and Continue wa
   // Back and Next move at the reader's pace.
   const kicker = () => card.locator('.guide-kicker').evaluate((el) => el.textContent ?? '');
   const first = await kicker();
-  if (await card.getByRole('button', { name: 'Next event' }).count()) {
-    await card.getByRole('button', { name: 'Next event' }).click();
+  if (await card.getByRole('button', { name: /^(Next|Reveal the orders)\s*$/ }).count()) {
+    await card.getByRole('button', { name: /^(Next|Reveal the orders)\s*$/ }).click();
     await card.getByRole('button', { name: 'Back' }).click();
     await expect.poll(kicker).toBe(first);
   }
@@ -211,7 +212,7 @@ const interrupts: Interrupt[] = [
   { name: 'Country details dialog', act: (p) => p.getByRole('button', { name: 'Country details' }).click(), after: (p) => p.getByRole('button', { name: 'Close dialog' }).click() },
   { name: 'Set up a game dialog', act: (p) => p.locator('.new-simulation').click(), after: (p) => p.getByRole('button', { name: 'Close dialog' }).click() },
   { name: 'Guided view toggle', act: (p) => p.getByRole('switch', { name: 'Guided view' }).click() },
-  { name: 'Messages tab', act: (p) => navTab(p, 'Messages').click(), after: (p) => navTab(p, 'Watch').click() },
+  { name: 'Conversations tab', act: (p) => navTab(p, 'Conversations').click(), after: (p) => navTab(p, 'Watch').click() },
   { name: 'Timeline tab', act: (p) => navTab(p, 'Timeline').click(), after: (p) => navTab(p, 'Watch').click() },
   { name: 'Compared with history tab', act: (p) => navTab(p, 'Compared with history').click(), after: (p) => navTab(p, 'Watch').click() },
   { name: 'History tab', act: (p) => historyTab(p).click(), after: (p) => navTab(p, 'Watch').click() },
@@ -529,10 +530,15 @@ for (const record of records) {
     await primary(page).click();
     const card = guideCard(page);
     await expect(card).toBeVisible();
-    expect((await moment(page))[0]).toBe(1);
+    // The walkthrough of phase 0 starts at its start (moment 0) and shows the board after it from the reveal on.
+    expect((await moment(page))[0]).toBe(0);
     await readToSummary(page);
+    expect((await moment(page))[0]).toBe(1);
     await card.getByRole('button', { name: 'Continue', exact: true }).click();
     await expect(card).toBeVisible();
+    // The next phase also starts from its own start: moment 1, orders not revealed.
+    expect((await moment(page))[0]).toBe(1);
+    await readToSummary(page);
     expect((await moment(page))[0]).toBe(2);
     await expect(primary(page)).toHaveText('Close guide');
     await primary(page).click();
@@ -660,7 +666,7 @@ test('a late single-phase response for the previous game never replaces the game
   await expect(page.locator('.match-name')).toContainText('The fragile peace');
   await page.waitForTimeout(4000);
   await expect(page.locator('.match-name')).toContainText('The fragile peace');
-  await expect(page.locator('.timeline-labels')).toContainText('of 9');
+  await expect(page.locator('.timeline-labels')).toContainText(`of ${await samplePhases(request)}`);
   expect(t.pausesFor(a.id)).toBeGreaterThanOrEqual(1);
   await openFromHistory(page, 'Stepped game');
   await expectNoRunsFor(page, t, 3000);
@@ -678,7 +684,7 @@ test('a slow open is superseded by a newer one: only the latest game opened is s
   await historyTab(page).click();
   await page.getByRole('button', { name: 'Open Slow game' }).click();
   // The Watch tab shows while the slow game loads; a newer open (the sample card) wins.
-  await page.locator('.orientation').getByRole('button', { name: /sample/i }).first().click();
+  await page.getByRole('button', { name: /^Watch the first negotiation/ }).click();
   await page.waitForTimeout(3000);
   await expect(page.locator('.match-name')).toContainText('The fragile peace');
 });

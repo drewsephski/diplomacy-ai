@@ -1,0 +1,611 @@
+/* Conversations: thread list, thread view, and the full tab. Mobile first (360px+), 15px reading
+   text, 44px touch targets; two panes from 900px. Tokens come from styles.css (navy, gold,
+   Cormorant for subjects and quotes, Inter for UI). */
+
+.cv-page,
+.cv-thread,
+.cv-lists,
+.cv-list {
+  --cv-line: var(--border, #c7b58c26);
+  --cv-soft: #ffffff08;
+  --cv-text: #dedfd9;
+  --cv-kept: #8fb39a;
+  --cv-broken: #d08a74;
+  --cv-sealed: var(--gold, #c7aa74);
+}
+
+/* ---- Shared pieces ------------------------------------------------------------------------ */
+
+.cv-crests {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  flex-shrink: 0;
+  max-width: 82px;
+}
+
+.cv-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 26px;
+  padding: 2px 9px;
+  border: 1px solid var(--cv-line);
+  border-radius: 999px;
+  font-size: 12.5px;
+  line-height: 1.2;
+  color: var(--muted, #8f9a9e);
+  white-space: nowrap;
+}
+.cv-chip.kind.threat {
+  color: var(--cv-broken);
+  border-color: color-mix(in srgb, var(--cv-broken) 40%, transparent);
+}
+.cv-chip.kind.alliance {
+  color: var(--gold);
+}
+.cv-chip.response.accept {
+  color: var(--cv-kept);
+  border-color: color-mix(in srgb, var(--cv-kept) 45%, transparent);
+}
+.cv-chip.response.decline {
+  color: var(--cv-broken);
+  border-color: color-mix(in srgb, var(--cv-broken) 45%, transparent);
+}
+.cv-chip.response.counter {
+  color: var(--gold);
+  border-color: color-mix(in srgb, var(--gold) 45%, transparent);
+}
+.cv-chip.tag {
+  min-height: 20px;
+  padding: 0 7px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.cv-chip.new {
+  min-height: 20px;
+  padding: 0 7px;
+  font-size: 11px;
+  color: #10171c;
+  background: var(--gold);
+  border-color: var(--gold);
+}
+button.cv-chip {
+  min-height: 44px;
+  padding: 0 12px;
+  font-size: 14px;
+  color: var(--cv-text);
+  background: var(--cv-soft);
+}
+button.cv-chip:hover {
+  border-color: color-mix(in srgb, var(--gold) 55%, transparent);
+}
+.cv-chip.place svg {
+  color: var(--gold);
+}
+
+.cv-places {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cv-link {
+  display: inline;
+  min-height: 0;
+  padding: 0;
+  color: var(--gold);
+  font-size: inherit;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--gold) 45%, transparent);
+  text-underline-offset: 3px;
+}
+.cv-link.cv-read {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+
+.cv-empty {
+  margin: 12px 0;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.cv-note {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+/* ---- Thread ------------------------------------------------------------------------------ */
+
+.cv-thread {
+  color: var(--cv-text);
+}
+.cv-thread-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.cv-subject {
+  margin: 0;
+  font: 500 24px/1.15 var(--serif);
+  color: #f1ece0;
+}
+.cv-participants {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+.cv-mutual {
+  margin: 12px 0 0;
+  padding: 9px 12px;
+  border-left: 2px solid var(--gold);
+  background: var(--cv-soft);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.cv-messages,
+.cv-messages ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cv-round {
+  margin-top: 18px;
+}
+.cv-separator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 8px;
+  color: var(--gold);
+  font: 600 11.5px/1 'Inter Variable', sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.cv-separator::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--cv-line);
+}
+.cv-separator em {
+  font-style: normal;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+.cv-message {
+  position: relative;
+  margin: 0 0 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--cv-line);
+  border-radius: 6px;
+  background: #121b20;
+  scroll-margin: 80px;
+  transition: border-color 0.4s ease, box-shadow 0.4s ease;
+}
+.cv-message:focus {
+  outline: none;
+}
+.cv-message.highlight {
+  border-color: color-mix(in srgb, var(--gold) 70%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--gold) 40%, transparent);
+}
+.cv-message-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+.cv-from {
+  font-weight: 600;
+  font-size: 15px;
+}
+.cv-to {
+  color: var(--muted);
+  font-size: 14px;
+}
+.cv-chips {
+  display: inline-flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.cv-reply-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 13.5px;
+}
+.cv-reply-link .cv-link {
+  min-height: 32px;
+}
+.cv-inferred {
+  font-style: italic;
+}
+.cv-summary {
+  margin: 8px 0 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: #ece8dc;
+}
+.cv-original {
+  margin: 8px 0 0;
+  padding: 8px 0 0 12px;
+  border-left: 1px solid color-mix(in srgb, var(--gold) 35%, transparent);
+  font: italic 400 18px/1.45 var(--serif);
+  color: #d7d3c6;
+}
+.cv-original-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 2px;
+  font: 500 11px/1.4 'Inter Variable', sans-serif;
+  font-style: normal;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.cv-standing {
+  margin: 8px 0 0;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+.cv-standing.accepted {
+  color: var(--cv-kept);
+}
+.cv-standing.declined {
+  color: var(--cv-broken);
+}
+
+.cv-commitment {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--cv-line);
+  border-left: 3px solid var(--cv-sealed);
+  border-radius: 4px;
+  background: var(--cv-soft);
+}
+.cv-commitment.kept {
+  border-left-color: var(--cv-kept);
+}
+.cv-commitment.broken {
+  border-left-color: var(--cv-broken);
+}
+.cv-commitment-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.cv-commitment-label {
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.cv-status {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cv-sealed);
+}
+.cv-status.kept {
+  color: var(--cv-kept);
+}
+.cv-status.broken {
+  color: var(--cv-broken);
+}
+.cv-commitment-plain {
+  margin: 6px 0 0;
+  font-size: 15px;
+  line-height: 1.45;
+}
+.cv-commitment-actual {
+  margin: 6px 0 0;
+  font-size: 14.5px;
+  line-height: 1.45;
+}
+.cv-commitment-actual.failed {
+  color: #e6c98f;
+}
+.cv-exact {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.cv-exact summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  cursor: pointer;
+}
+.cv-exact code {
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: #0b1115;
+  color: #e7dfc9;
+  font-size: 13px;
+}
+.cv-commitment > .cv-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: 14px;
+}
+
+.cv-open {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px dashed color-mix(in srgb, var(--gold) 40%, transparent);
+  border-radius: 6px;
+}
+.cv-open h4 {
+  margin: 0 0 6px;
+  color: var(--gold);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.cv-open ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.cv-thread.compact .cv-subject {
+  font-size: 21px;
+}
+.cv-thread.compact .cv-message {
+  padding: 10px 12px;
+}
+.cv-thread.compact .cv-original {
+  font-size: 17px;
+}
+
+/* ---- Thread list ------------------------------------------------------------------------- */
+
+.cv-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cv-row {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  border: 1px solid var(--cv-line);
+  border-radius: 6px;
+  background: #121b20;
+}
+.cv-row.active {
+  border-color: color-mix(in srgb, var(--gold) 60%, transparent);
+  background: color-mix(in srgb, var(--gold) 6%, #121b20);
+}
+.cv-row-main {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 56px;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  text-align: left;
+}
+.cv-row-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.cv-row-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.cv-row-subject {
+  font: 500 17px/1.2 var(--serif);
+  color: #f1ece0;
+}
+.cv-row-last {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #c9c7bd;
+}
+.cv-row-meta {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.cv-row-place {
+  align-self: flex-start;
+  margin: -4px 12px 10px 12px;
+}
+.cv-list-head {
+  margin: 4px 0 8px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+.cv-elsewhere {
+  margin-top: 14px;
+}
+.cv-elsewhere > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  cursor: pointer;
+}
+.cv-count {
+  min-width: 22px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--cv-soft);
+  text-align: center;
+  letter-spacing: 0;
+}
+
+/* ---- Page -------------------------------------------------------------------------------- */
+
+.cv-page {
+  padding: 16px 16px 96px;
+  color: var(--cv-text);
+}
+.cv-page-head {
+  margin-bottom: 14px;
+}
+.cv-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+.cv-page-head h1 {
+  margin: 6px 0 2px;
+  font: 500 30px/1.1 var(--serif);
+}
+.cv-moment {
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+.cv-filter {
+  display: flex;
+  gap: 6px;
+  margin: 0 -16px 12px;
+  padding: 0 16px 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.cv-filter::-webkit-scrollbar {
+  display: none;
+}
+.cv-chip.filter.on {
+  color: #10171c;
+  background: var(--nation, var(--gold));
+  border-color: var(--nation, var(--gold));
+}
+.cv-pane {
+  position: relative;
+}
+.cv-back {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  margin-bottom: 8px;
+  color: var(--gold);
+  font-size: 15px;
+}
+.cv-new {
+  position: sticky;
+  /* Clears the phone playback dock; the Watch layout can override --cv-dock-offset. */
+  bottom: calc(var(--cv-dock-offset, 84px) + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  margin: 12px auto 0;
+  padding: 0 16px;
+  border-radius: 999px;
+  background: var(--gold);
+  color: #10171c;
+  font-weight: 600;
+  font-size: 14px;
+  box-shadow: 0 6px 18px #0008;
+}
+
+/* Phones: list first; opening a thread shows it with a way back. */
+@media (max-width: 899px) {
+  .cv-thread .cv-places {
+    flex-wrap: nowrap;
+    margin-right: -16px;
+    padding-right: 16px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .cv-thread .cv-places::-webkit-scrollbar {
+    display: none;
+  }
+  .cv-page .cv-pane {
+    display: none;
+  }
+  .cv-page.reading .cv-side {
+    display: none;
+  }
+  .cv-page.reading .cv-pane {
+    display: block;
+  }
+  .cv-page.reading .cv-back {
+    display: inline-flex;
+  }
+}
+
+/* Desktop: list and thread side by side; each pane scrolls on its own. */
+@media (min-width: 900px) {
+  .cv-page {
+    padding: 24px 28px 40px;
+  }
+  .cv-layout {
+    display: grid;
+    grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+    gap: 24px;
+    align-items: start;
+  }
+  .cv-side,
+  .cv-pane {
+    max-height: calc(100vh - 210px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 4px;
+  }
+  .cv-filter {
+    flex-wrap: wrap;
+    margin: 0 0 12px;
+    padding: 0;
+    overflow: visible;
+  }
+  .cv-pane {
+    padding: 4px 8px 16px 0;
+    --cv-dock-offset: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cv-message {
+    transition: none;
+  }
+}

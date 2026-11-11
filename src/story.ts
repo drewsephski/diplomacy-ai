@@ -86,6 +86,13 @@ export const PROVINCES: Record<string, string> = {
   YOR: 'Yorkshire',
 };
 
+/** The 34 supply centers of the standard map (base codes). */
+export const SUPPLY_CENTERS = [
+  'ANK', 'BEL', 'BER', 'BRE', 'BUD', 'BUL', 'CON', 'DEN', 'EDI', 'GRE', 'HOL', 'KIE',
+  'LON', 'LVP', 'MAR', 'MOS', 'MUN', 'NAP', 'NWY', 'PAR', 'POR', 'ROM', 'RUM', 'SER',
+  'SEV', 'SMY', 'SPA', 'STP', 'SWE', 'TRI', 'TUN', 'VEN', 'VIE', 'WAR',
+] as const;
+
 const COASTS: Record<string, string> = {
   NC: 'north coast',
   SC: 'south coast',
@@ -187,6 +194,56 @@ export function describeOrder(order: string): OrderReading {
   return { ...base, kind: 'unknown', summary: exact };
 }
 
+const SEA_NAME = /\b(Sea|Ocean|Channel|Gulf|Bight|Skagerrak|Mediterranean)\b/;
+
+/** A province in a sentence: "Brest", "the English Channel". */
+export function placePhrase(code: string) {
+  const name = provinceName(code);
+  return SEA_NAME.test(name) ? `the ${name}` : name;
+}
+
+/** "the fleet in Brest", "the army in the Ruhr"-style phrase for a unit. */
+function unitIn(unit: string) {
+  const [type, loc = ''] = unit.replace('*', '').split(' ');
+  return `the ${type === 'F' ? 'fleet' : type === 'A' ? 'army' : 'unit'} in ${placePhrase(loc)}`;
+}
+
+/**
+ * One order as a plain sentence, without notation: "The fleet in Brest moves to the Mid-Atlantic
+ * Ocean", "The army in Holland supports the fleet in the English Channel into Belgium". The exact
+ * engine text stays available separately; this is the reading shown first.
+ */
+export function plainOrder(order: string): string {
+  if (order === 'No order issued') return 'No order was issued for that unit';
+  const r = describeOrder(order);
+  const t = order.trim().split(/\s+/);
+  const self = unitIn(r.unit);
+  const cap = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
+  switch (r.kind) {
+    case 'hold':
+      return cap(`${self} holds`);
+    case 'move':
+      return cap(`${self} moves to ${placePhrase(t[3] ?? r.target ?? '')}${order.trim().endsWith(' VIA') ? ' by convoy' : ''}`);
+    case 'retreat':
+      return cap(`${self} retreats to ${placePhrase(t[3] ?? r.target ?? '')}`);
+    case 'support': {
+      const supported = unitIn(`${t[3] ?? ''} ${t[4] ?? ''}`);
+      const dash = t.indexOf('-', 4);
+      return dash > 0 && t[dash + 1]
+        ? cap(`${self} supports ${supported} into ${placePhrase(t[dash + 1])}`)
+        : cap(`${self} supports ${supported} to hold`);
+    }
+    case 'convoy':
+      return r.target ? cap(`${self} carries ${unitIn(`${t[3]} ${t[4]}`)} to ${placePhrase(r.target)}`) : cap(`${self} convoys ${unitIn(`${t[3]} ${t[4]}`)}`);
+    case 'build':
+      return `Build ${r.unit.startsWith('F') ? 'a fleet' : 'an army'} in ${placePhrase(t[1] ?? r.origin)}`;
+    case 'disband':
+      return cap(`${self} disbands`);
+    default:
+      return r.summary;
+  }
+}
+
 /** Engine result tokens for a unit, rendered as plain outcomes. Empty means it succeeded. */
 export function outcomeText(results: string[] | undefined): string {
   const tokens = (results ?? []).filter(Boolean);
@@ -278,10 +335,22 @@ export function buildStory(match: Match, turnIndex: number): Story | undefined {
       compare: { promised: promise.promised, actual: promise.actual },
     });
   }
+  // Kept promises whose order failed. Kept promises that bounced against each other in one place are
+  // one story (two fleets promised into the Black Sea), so they share a moment.
+  const failed = new Map<string, { promise: (typeof turn.promises)[number]; results: string[] }[]>();
+  const toldFailed = new Set<string>();
   for (const promise of turn.promises.filter((p) => p.kept)) {
-    const results = turn.results[describeOrder(promise.promised).unit];
-    if (results?.some((r) => LOSING.has(r))) {
-      counts.kept++;
+    counts.kept++;
+    const reading = describeOrder(promise.promised);
+    const results = turn.results[reading.unit];
+    if (!results?.some((r) => LOSING.has(r))) continue;
+    toldFailed.add(reading.unit);
+    const key = reading.kind === 'move' && reading.target && results.includes('bounce') ? reading.target : `${promise.from}-${promise.promised}`;
+    failed.set(key, [...(failed.get(key) ?? []), { promise, results }]);
+  }
+  for (const [key, group] of failed) {
+    if (group.length === 1) {
+      const { promise, results } = group[0];
       const reading = describeOrder(promise.promised);
       moments.push({
         id: `kept-failed-${promise.from}-${promise.promised}`,
@@ -293,9 +362,19 @@ export function buildStory(match: Match, turnIndex: number): Story | undefined {
         province: reading.origin,
         exact: promise.promised,
       });
-    } else {
-      counts.kept++;
+      continue;
     }
+    const names = group.map((g) => NATIONS[g.promise.from].name);
+    moments.push({
+      id: `kept-failed-group-${key}`,
+      tone: 'kept-failed',
+      label: 'Orders kept, outcome failed',
+      headline: `${names.slice(0, -1).join(', ')} and ${names.at(-1)} kept their word, and their moves bounced in ${provinceName(key)}`,
+      detail: `${group.map((g) => describeOrder(g.promise.promised).summary).join('. ')}. Each order matched its promise; equal forces met, so no unit entered.`,
+      power: group[0].promise.from,
+      province: key,
+      exact: group.map((g) => g.promise.promised).join(' · '),
+    });
   }
 
   // 2. Supply centers that changed hands between the two adjacent checkpoints.
@@ -337,7 +416,7 @@ export function buildStory(match: Match, turnIndex: number): Story | undefined {
     for (const order of turn.decisions[p].orders) {
       const reading = describeOrder(order);
       const results = turn.results[reading.unit];
-      if (reading.kind === 'move' && results?.includes('bounce')) {
+      if (reading.kind === 'move' && results?.includes('bounce') && !toldFailed.has(reading.unit)) {
         counts.standoffs++;
         const defender = reading.target ? occupantAt(before.state, reading.target) : undefined;
         moments.push({

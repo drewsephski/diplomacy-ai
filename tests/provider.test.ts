@@ -65,13 +65,19 @@ globalThis.fetch = async (input, init) => {
     RUSSIA: 'TURKEY',
     TURKEY: 'RUSSIA',
   };
-  const content = prompt.startsWith('Send')
+  const open = (view.openProposals as { ref: string }[] | undefined) ?? [];
+  const content = prompt.startsWith('NEGOTIATE')
     ? {
         messages: [
           {
             to: [recipients[p]],
             text: `PRIVATE-${p}-${recipients[p]}`,
-            kind: 'proposal',
+            kind: open.length ? 'reply' : 'proposal',
+            // Answer the first open proposal by its short reference, the way the schema allows.
+            replyTo: open[0]?.ref ?? null,
+            response: open.length ? 'accept' : null,
+            request: open.length ? null : 'Keep your units home',
+            provinces: ['BEL', 'ENG'],
             // Austria's unit is not Germany's to promise; the schema must refuse this output.
             promise: illegalPromise && p === 'GERMANY' ? 'A VIE - GAL' : null,
           },
@@ -258,7 +264,7 @@ test('negotiation schema accepts only own legal promises, null, and other powers
   const own = ownLegalOrders(state.legal, 'GERMANY');
   const schema = negotiationSchemaFor('GERMANY', own);
   const message = (promise: unknown, to: unknown = ['FRANCE']) => ({
-    messages: [{ to, text: 'x', kind: 'proposal', promise }],
+    messages: [{ to, text: 'x', kind: 'proposal', promise, replyTo: null, response: null, request: null, provinces: [] }],
   });
   assert.ok(schema.safeParse(message(null)).success);
   assert.ok(schema.safeParse(message('F KIE - DEN')).success);
@@ -266,4 +272,66 @@ test('negotiation schema accepts only own legal promises, null, and other powers
   assert.ok(!schema.safeParse(message('F BRE - MAO')).success, 'France never legal for Germany');
   assert.ok(!schema.safeParse(message(null, ['GERMANY'])).success, 'no self-messages');
   assert.ok(!schema.safeParse(message(null, ['FRANCE', 'FRANCE2'])).success, 'unknown recipient');
+});
+
+test('live replies are threaded by short reference, stored as real ids, and promise checks name their message', async () => {
+  fail = false;
+  illegalPromise = false;
+  seen.length = 0;
+  const m = await createMatch(
+    'threading',
+    'live',
+    powerMap(() => ({ model: 'test/model', profile: 'strategist' })),
+    { ...DEFAULT_LIMITS, maxPhases: 1, diplomacyRounds: 1 },
+  );
+  await startMatch(m.id);
+  const result = getMatch(m.id);
+  assert.equal(result.status, 'complete', result.error);
+  const messages = result.turns[0].messages;
+  const ids = new Set(messages.map((x) => x.id));
+  const replies = messages.filter((x) => x.replyTo);
+  assert.ok(replies.length > 0, 'at least one reply was recorded');
+  for (const r of replies) {
+    assert.ok(ids.has(r.replyTo!), 'replyTo is a real message id, never a short ref');
+    const target = messages.find((x) => x.id === r.replyTo)!;
+    assert.ok(target.from === r.from || target.to.includes(r.from), 'a reply only answers a message its sender could see');
+    assert.equal(r.response, 'accept');
+  }
+  for (const x of messages) assert.deepEqual(x.provinces, ['BEL', 'ENG']);
+  // Every observation listed references, never raw message ids.
+  for (const { view } of seen) {
+    const text = JSON.stringify(view);
+    for (const id of ids) assert.ok(!text.includes(id), 'observations never carry message ids');
+  }
+});
+
+test('the negotiation prompt asks for concrete, answerable diplomacy and the schema stays compact', async () => {
+  const { buildAgentPrompt, negotiationSchemaFor, decisionSchemaFor, ownLegalOrders, PROVINCE_CODES } = await import(
+    '../server/provider.js'
+  );
+  const { z } = await import('zod');
+  const m = await createMatch('prompt', 'sandbox');
+  const { prompt } = buildAgentPrompt(m, 'FRANCE', 'negotiate');
+  assert.ok(prompt.startsWith('NEGOTIATE'));
+  for (const word of ['replyTo', 'response', 'counter', 'request', 'provinces', 'promise', 'commitments'])
+    assert.ok(prompt.includes(word), `negotiation prompt mentions ${word}`);
+  const decide = buildAgentPrompt(m, 'FRANCE', 'decide').prompt;
+  assert.ok(decide.startsWith('DECIDE'));
+  assert.match(decide, /one to three plain sentences/);
+  const view = JSON.parse(prompt.split('OBSERVATION:\n')[1]);
+  for (const key of ['position', 'reach', 'commitments', 'openProposals', 'yourPastExplanations'])
+    assert.ok(key in view, `observation has ${key}`);
+  assert.ok(view.reach.centersYouCanEnter.includes('SPA'), 'France can enter Spain in Spring 1901');
+  const own = ownLegalOrders(m.checkpoints[0].state.legal, 'FRANCE');
+  const schema = negotiationSchemaFor('FRANCE', own, ['m1', 'm2']);
+  const ok = { to: ['ENGLAND'], text: 'x', kind: 'reply', promise: null, replyTo: 'm2', response: 'counter', request: 'Hold', provinces: ['ENG'] };
+  assert.ok(schema.safeParse({ messages: [ok] }).success);
+  assert.ok(!schema.safeParse({ messages: [{ ...ok, replyTo: 'm3' }] }).success, 'only visible references');
+  assert.ok(!schema.safeParse({ messages: [{ ...ok, provinces: ['XYZ'] }] }).success, 'only real provinces');
+  assert.ok(!schema.safeParse({ messages: [{ ...ok, response: 'maybe' }] }).success);
+  assert.ok(!PROVINCE_CODES.includes('GOL'), 'one code per province');
+  const bytes = JSON.stringify(z.toJSONSchema(negotiationSchemaFor('FRANCE', own, ['m1']))).length;
+  assert.ok(bytes < 4000, `negotiation schema is compact (${bytes} bytes)`);
+  const decision = decisionSchemaFor('FRANCE', own);
+  assert.ok(!decision.safeParse({ orders: [], explanation: 'x'.repeat(421), memory: 'm', relationships: [] }).success, 'explanations stay short');
 });

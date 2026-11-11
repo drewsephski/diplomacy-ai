@@ -1,21 +1,27 @@
 /**
  * Guided-walkthrough state, kept separate from the UI. The state is intentionally small: which
- * resolved phase is open, which step it is on, and how many resolved phases the viewer has
+ * resolved phase is open, which beat it is on, and how many resolved phases the viewer has
  * finished. There are no timers, so nothing advances on its own. Every move is a user action.
+ *
+ * Steps count the walkthrough's beats (src/guided/beats.ts). The last beat is always the phase
+ * summary (`next`), so `step === count` is the summary.
  */
 
 export interface GuideState {
   /** Index into `match.turns` of the phase being walked. Undefined when the guide is closed. */
   turn?: number;
-  /** 0 .. events.length - 1 are event popups; events.length is the phase summary card. */
+  /** 0 .. beats.length - 1. The last beat is the phase summary. */
   step: number;
   /** How many resolved phases the viewer has walked through to the end. Drives the live queue. */
   reviewed: number;
+  /** The viewer watched this phase's talks live: the walkthrough begins at the sealed orders. */
+  brief?: boolean;
 }
 
 export type GuideAction =
   | { type: 'reset'; resolved: number }
-  | { type: 'open'; turn: number; step?: number }
+  | { type: 'open'; turn: number; step?: number; brief?: boolean }
+  /** `count` is the index of the last beat (beats.length - 1). */
   | { type: 'step'; to: number; count: number }
   | { type: 'close'; finished?: boolean };
 
@@ -29,7 +35,8 @@ export function guideReducer(state: GuideState, action: GuideAction): GuideState
       return initialGuide(action.resolved);
     case 'open': {
       if (action.turn < 0) return state;
-      return { ...state, turn: action.turn, step: Math.max(0, action.step ?? 0) };
+      const next: GuideState = { reviewed: state.reviewed, turn: action.turn, step: Math.max(0, action.step ?? 0) };
+      return action.brief ? { ...next, brief: true } : next;
     }
     case 'step': {
       if (state.turn === undefined) return state;

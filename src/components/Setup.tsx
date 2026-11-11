@@ -166,7 +166,7 @@ export function Setup({
             <div className="mode-options" role="group" aria-label="Who plays">
               <button type="button" aria-pressed={live} className={live ? 'selected' : ''} onClick={() => setMode('live')} disabled={!configured}>
                 <Radio size={20} />
-                <strong>AI countries (recommended)</strong>
+                <strong>{configured ? 'AI countries (recommended)' : 'AI countries · needs a key'}</strong>
                 <span>Each country is a language model that negotiates and orders. Costs are shown before you start.</span>
                 {live && <Check size={16} />}
               </button>

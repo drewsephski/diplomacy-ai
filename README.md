@@ -15,7 +15,7 @@ cp .env.example .env
 pnpm dev
 ```
 
-Open **http://127.0.0.1:5173**. On first startup, the server creates a nine-phase sample replay using the real adjudicator. No API key is required to explore it or run a sandbox.
+Open **http://127.0.0.1:5173**. On first startup, the server creates an eleven-phase sample replay using the real adjudicator. No API key is required to explore it or run a sandbox.
 
 For real agents, put your **OpenRouter** key in `.env`:
 
@@ -38,40 +38,42 @@ Open **http://127.0.0.1:3001**. Vite is development-only; Express serves the bui
 
 ## Reading the observatory
 
-The first screen states the role in one line: seven countries negotiate in private, then seal secret orders that resolve together, and 18 of 34 supply centers wins. You are the observer and nothing needs your input. The welcome card can be hidden, and **How to watch** brings it back.
+**First visit.** A welcome panel (not a modal; the map stays visible) states the role in one line: *You watch. Seven independent countries decide. Nothing waits for your orders.* Its one primary action, **Watch the first negotiation**, opens the free sample at its opening, follows France, and walks through Spring 1901: the France–Britain stakes over the English Channel, their private talks, one question to watch (with an optional local guess), the sealed orders, the reveal, and what changed. **Explore on my own** and **Set up a game with AI countries** are secondary. The panel can be hidden, and **How to watch** brings it back. Short concept notes (why supply centers matter, promises versus orders, simultaneous resolution, a kept promise that still fails) appear the first time they are relevant.
 
-Three labels describe where the record comes from. **Recorded sample** replays an authored game through the real rules engine, with no model calls. **Local sandbox** runs deterministic local policies. **Live agents** calls real models, and cost appears in the status bar.
+**Provenance.** **Recorded sample** replays an authored game through the real rules engine, with no model calls. **Local sandbox** runs deterministic local policies. **AI countries** calls real models, and cost appears in the status bar.
 
-A **moment** is the board at the **start** of a phase. Moment 1 of the sample, for example, shows the start of Autumn 1901 movement, and the story panel describes the Spring 1901 movement that produced it (“last phase”). The guide strip reads one of four ways: *earlier in the record* when you are viewing the past, *happening now* while a phase is being played, *next phase* at the latest moment before anything runs, or *match complete*.
+**The moment rule.** A **moment** is the board at the **start** of a phase. At moment *i* every view (Watch, Conversations, country details, Timeline, Compared with history, the alternate-timeline comparison) shows the talks of phases up to and including *i*, but orders, results, and promise outcomes only for phases that resolved before *i*. A promise made in the phase on screen is shown as *sealed · orders not revealed yet*. The recorded past therefore behaves exactly like the live edge, and an earlier moment never shows a later fact.
 
-The **Happening now** strip shows three steps: private talks, sealed orders, and resolution. Its counts come from the recorded state. Sealed orders stay hidden until every country has submitted and the rules engine resolves them together. Retreats and adjustments skip talks.
+**Watch stage.** Desktop: a **Follow a country** rail (seven chips with center counts, then the followed country's card: what it wants, its centers and units at this moment, who it is talking with, its promises and their status, and a clearly labelled *Real history* note), the map with the guide card over it, and a story panel with *Watch for* (the phase's questions), **Talks** (threads of the phase on screen, the followed country first, the rest under *Elsewhere*), and **What happened** (the last resolved phase). Phone (≤760px): a compact top bar with a **Menu** sheet (navigation, Guided view, How to watch, Set up a game), the country strip, the map, **Story · Talks · Country** tabs, and a fixed playback dock. The guide's bottom sheet takes the dock's place while it is open and can collapse to a peek bar. A one-finger drag over the map scrolls the page; zoom with the buttons or a pinch, or turn on **Move map with one finger**.
 
-**What happened** explains the last resolved phase in plain language: broken commitments (promised order beside the submitted one), kept commitments whose order still failed, supply centers that changed hands, bounced attacks, and successful moves into occupied provinces. Each moment links to its country, to the map, or to the dispatches. Every submitted order is listed underneath, with its exact engine text.
+**Conversations** groups the dispatches into threads by their exact participants (group threads keep all their members), with a plain summary per message, the original words, recorded reply links (an inferred link says so), the places named, open questions, and each promise's status: sealed, kept, or broken, with what was ordered and how it resolved. Orders read in plain language first, with the exact engine text as detail.
+
+**What happened** explains the last resolved phase in plain language: broken commitments (promised order beside the submitted one), kept commitments whose order still failed, supply centers that changed hands, bounced attacks, and successful moves into occupied provinces. Every submitted order is listed underneath, with its exact engine text.
 
 ### Watching a game
 
 **Start game** creates the game and plays its first phase. From then on the page holds one *watch session* for that game, and the session is the only thing that ever asks the server for a phase, one at a time:
 
-- **Guided view on (the default).** Each phase that resolves opens its walkthrough on its own: what happened, why it matters, and the province on the map, one popup per event, with **Back**, **Next event**, and **Skip to phase summary**. The next phase waits until you press **Continue watching** on the summary. The status line reads *Reading · the next phase waits for Continue watching*. The final phase offers **See the result** instead.
+- **Guided view on (the default).** Each phase that resolves opens its walkthrough on its own: what happened, why it matters, and the province on the map, in beats: stakes, talks, a question, the sealed orders, **Reveal the orders**, the events, and a summary that answers the question and offers a supported *What if?*. **Back**, **Next**, and **Skip to phase summary** move at your pace. The next phase waits until you press **Continue watching** on the summary. The status line reads *Reading · the next phase waits for Continue watching*. The final phase offers **See the result** instead.
 - **Guided view off.** The game plays on, one phase at a time with a short gap, until you pause it or it reaches its limit.
 - **Pause game** always reaches the server, even while the request for a phase is still in transit, and shows **Pausing…** until the server is idle. A phase in progress stops after its current model call.
 - **Closing, hiding, or leaving always pauses.** Closing the guide, turning guidance off, toggling Guided view, opening any dialog, switching to any other tab, scrubbing the timeline, hiding the browser tab, opening another game, and refreshing all end the session. Nothing resumes until you press **Resume game** (or Continue watching while a phase is held).
 - **Play next phase** plays exactly one phase and stops.
 
-Every order in a phase still resolves at the same moment; the event popups are narration of that one resolution, in order of importance.
+Every order in a phase still resolves at the same moment; the beats after the reveal narrate that one resolution, in order of importance.
 
 ### Replaying a record
 
-Any record (the sample, a sandbox game, or a live game, finished or paused) replays from any recorded moment with no request to the server and no cost. With Guided view on, **Watch with a guide** walks the recorded phases; with it off, **Play replay** advances them on a timer, and **Replay speed** sets its pace. Looking at the past of an unfinished game, **Resume at latest** is a separate, labelled control; the primary control never jumps to a billed phase. A dialog, tab switch, or hidden page also stops the free replay timer.
+Any record (the sample, a sandbox game, or a live game, finished or paused) replays from any recorded moment with no request to the server and no cost. With Guided view on, **Watch with a guide** walks the phase on screen from its start (its board before the reveal, then after it) and continues through the recorded phases; with it off, **Play replay** advances them on a timer, and **Replay speed** sets its pace. Looking at the past of an unfinished game, **Resume at latest** is a separate, labelled control; the primary control never jumps to a billed phase. A dialog, tab switch, or hidden page also stops the free replay timer.
 
 ## What you can do
 
 - Watch a selectable, pannable, zoomable standard-map Europe. Toggle revealed movement arrows and inspect supply centers and units.
-- Inspect every country’s objective, decision summaries, trust assessments, private correspondence, and memory at a particular checkpoint.
-- Read bilateral and group messages, and compare exact promised orders with the orders actually issued. A kept promise can still fail tactically.
-- Find every game you started in **History**: its mode, phases, cost, and true result (a phase limit is never shown as a win). **Open** loads a game at its latest moment and **From the start** at its opening; neither plays anything. **Delete** asks first and removes a game for good; the sample cannot be deleted, a running game cannot be deleted, and an alternate timeline whose original was deleted keeps working.
+- Inspect every country’s objective, its own explanation of its last orders, its stated trust in each neighbor (an assessment, not an alliance), its conversations, and its private notes, all as of the moment on screen.
+- Read bilateral and group conversations, and compare promised orders with the orders actually issued. A kept promise can still fail tactically.
+- Find every game you started in **History**: its mode, phases, cost, the question that started an alternate timeline, and its true result (a phase limit is never shown as a win). **Open** loads a game at its latest moment and **From the start** at its opening; neither plays anything. **Delete** asks first and removes a game for good; the sample cannot be deleted, a running game cannot be deleted, and an alternate timeline whose original was deleted keeps working.
 - Replay saved phases, seek through the timeline, and export a JSON archive. Games are automatically persisted in SQLite under `data/`.
-- Branch at any nonterminal checkpoint. Override one legal order, inject a private diplomatic message, or change a country’s profile. The branch restores past memory and excludes the original future. Compare both continuations side by side.
+- Explore **What if?** After a consequential decision the phase summary offers a supported experiment, such as *What if France had kept its promise?*: the dialog opens at the checkpoint before the decision with the one change filled in, says what changes and what the original record shows, and states honestly what each continuation can show. **Try a different decision** offers the same at any nonterminal moment: replace one legal order, change a country's profile, or (with AI countries only) add a message. The free sandbox does not read messages or react strategically, so it does not offer them. The alternate timeline stores its question and change; **Alternate timeline** compares it with the original: the shared past, the first phase played differently (orders and centers), the standings, and a button back to the original at the branch moment.
 - Use competitive, coalition-building, opportunistic, or historically informed profiles. Historical interests start in 1901; future alliances and events are not supplied to agents.
 - Explore **Compared with history**, which combines current observations with linked museum and government sources and explains the game’s historical limitations.
 
@@ -81,7 +83,7 @@ Any record (the sample, a sandbox game, or a live game, finished or paused) repl
 
 **Local sandbox:** a deliberately simple deterministic policy selects legal orders. It is useful for exploring rules, playback, and order branches; it is not a strong Diplomacy player. Messages are recorded but do not influence this policy. Profiles alter deterministic order ranking rather than producing sophisticated historical behavior.
 
-**Live agents:** each country receives an independent model call with its own objective, profile, memory, eligible messages, legal orders, and public board history. Real model outputs determine negotiation and orders; the adjudicator determines outcomes. Mixed models and a uniform-model setup are both supported. No benchmark or human-level play claim is made.
+**AI countries:** each country receives an independent model call with its own objective, profile, memory, eligible messages, legal orders, and public board history. Real model outputs determine negotiation and orders; the adjudicator determines outcomes. Mixed models and a uniform-model setup are both supported. No benchmark or human-level play claim is made.
 
 ### Pause, costs, and recovery
 
@@ -129,7 +131,7 @@ pnpm test:browser
 pnpm build
 ```
 
-Browser tests start a separate built server on port 3012 with a fresh database in a temporary folder, and with `OPENROUTER_API_KEY` set to an empty string, so a key in `.env` is never loaded and no test can bill (`tests/browser/no-billing.spec.ts` asserts it). Tests that need the live setup screens fake `/api/health` and the model catalog in the browser. The watch-session regressions are in `tests/browser/watch.spec.ts` and the guided-card layout checks in `tests/browser/layout.spec.ts`. Provider-contract tests mock the HTTP boundary; the verification record separately identifies the earlier paid model runs.
+Browser tests start a separate built server on port 3012 with a fresh database in a temporary folder, and with `OPENROUTER_API_KEY` set to an empty string, so a key in `.env` is never loaded and no test can bill (`tests/browser/no-billing.spec.ts` asserts it). Tests that need the live setup screens fake `/api/health` and the model catalog in the browser. The watch-session regressions are in `tests/browser/watch.spec.ts`, the guided-card layout checks in `tests/browser/layout.spec.ts`, and the newcomer journey (desktop and 360/390/430px phones, the moment rule, conversations, states, touch, keyboard, reduced motion, and billing) in `tests/browser/journey.spec.ts`. `tests/moment.test.ts` checks that earlier moments never read later facts. Provider-contract tests mock the HTTP boundary; the verification record separately identifies the earlier paid model runs.
 
 To spend a small, capped amount on the economical models, run the bounded live proof once. It makes one phase with one diplomacy round, alternating GLM 5.3 Flash and Haiku 5.5, with a hard budget of $0.10. It writes its record to the local archive, and it prints transport facts only, never the key or headers. The records of earlier proof runs were deleted from the local archive at the owner's request; their results remain in the verification record as history:
 
@@ -147,6 +149,6 @@ The local tests cover full simulation flow, private projections, sealed orders, 
 - A model’s requested order need not be strategically good. This app verifies legality, not strategic strength.
 - Requests in a diplomacy round run sequentially; a later country can receive earlier countries’ messages from that round. Decision calls never see one another’s sealed orders.
 - Saved JSON exports are readable archives. The UI replays the durable local archive; it does not currently import external match files.
-- Branch comparisons show their actual phase labels. When retreat phases diverge, the closest available checkpoint by sequence is shown, with a warning if the phases differ.
+- Branch comparisons match the original by phase name. When retreat phases make the timelines drift apart, the nearest checkpoint is shown with a warning that it is not a same-phase comparison.
 - Historical profiles are bounded editorial interests, not recreations of specific leaders or factual forecasts.
 # diplomacy-ai

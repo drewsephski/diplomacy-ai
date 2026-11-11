@@ -19,9 +19,11 @@ import {
   type Turn,
 } from '../src/types.js';
 import { engine } from './engine.js';
-import { deleteMatchRecord, getMatch, saveMatch } from './store.js';
+import { deleteMatchRecord, getMatch, listMatches, saveMatch } from './store.js';
 import { askAgent, decisionSchemaFor, negotiationSchemaFor, ownLegalOrders } from './provider.js';
-import { sampleDecision, sampleMessages } from './sample-agent.js';
+import { messageRefs, visibleMessages } from './privacy.js';
+import { SAMPLE_NAME, SAMPLE_PHASES, SAMPLE_VERSION, sampleDecision, sampleMessages } from './sample-agent.js';
+import { PROVINCES } from '../src/story.js';
 export { DEFAULT_LIMITS };
 export async function createMatch(
   name: string,
@@ -88,6 +90,7 @@ export async function forkMatch(
   intervention: Intervention,
   mode: 'live' | 'sandbox',
   limits?: Limits,
+  question?: string,
 ): Promise<Match> {
   if (at < 0 || at >= original.checkpoints.length) throw new Error('Checkpoint does not exist.');
   const cp = structuredClone(original.checkpoints[at]);
@@ -122,7 +125,15 @@ export async function forkMatch(
       actualUsd: 0,
       unpricedCalls: 0,
     },
-    parent: { id: original.id, name: original.name, at },
+    // The one change and the viewer's question are kept on the record, so the comparison can say
+    // what this timeline changed after the intervention itself has been applied and cleared.
+    parent: {
+      id: original.id,
+      name: original.name,
+      at,
+      intervention: structuredClone(intervention),
+      ...(question?.trim() ? { question: question.trim().slice(0, 200) } : {}),
+    },
     intervention,
     pending: undefined,
     limits: limits || {
@@ -133,6 +144,39 @@ export async function forkMatch(
   saveMatch(fork);
   return fork;
 }
+/**
+ * Server-side backstop for every message before it is saved, whoever wrote it (live agent, authored
+ * sample, or sandbox). The schema already constrains live output; this enforces the same rules:
+ * - `replyTo` must name a message the sender sent or received (this phase or earlier). A link to
+ *   another pair's private message is dropped, never stored. `response` needs a valid `replyTo`.
+ * - `provinces` keeps only real base provinces, without duplicates, at most six.
+ * - `request` is plain trimmed text, at most 200 characters; empty is dropped.
+ */
+export function sanitizeDispatch<T extends Omit<Dispatch, 'id'>>(match: Match, power: Power, m: T): T {
+  const visible = new Set(
+    [...match.turns.flatMap((t) => t.messages), ...(match.pending?.messages ?? [])]
+      .filter((x) => visibleMessages([x], power).length)
+      .map((x) => x.id),
+  );
+  const replyTo = m.replyTo && visible.has(m.replyTo) ? m.replyTo : undefined;
+  const response = replyTo && m.response && ['accept', 'counter', 'decline'].includes(m.response) ? m.response : undefined;
+  const provinces = [...new Set((m.provinces ?? []).map((c) => String(c).split('/')[0].toUpperCase()))]
+    .filter((c) => c in PROVINCES && c !== 'GOL')
+    .slice(0, 6);
+  const request = typeof m.request === 'string' ? m.request.replace(/\s+/g, ' ').trim().slice(0, 200) : '';
+  const out = { ...m };
+  delete out.replyTo;
+  delete out.response;
+  delete out.request;
+  delete out.provinces;
+  return {
+    ...out,
+    ...(replyTo ? { replyTo } : {}),
+    ...(response ? { response } : {}),
+    ...(request ? { request } : {}),
+    ...(provinces.length ? { provinces } : {}),
+  };
+}
 function checkPromises(messages: Dispatch[], orders: PowerMap<string[]>): Turn['promises'] {
   return messages
     .filter((m) => m.promise)
@@ -140,7 +184,7 @@ function checkPromises(messages: Dispatch[], orders: PowerMap<string[]>): Turn['
       const promised = m.promise!;
       const unit = promised.split(' ').slice(0, 2).join(' ');
       const actual = orders[m.from].find((o) => o.startsWith(unit + ' ')) || 'No order issued';
-      return { from: m.from, to: m.to, promised, actual, kept: promised === actual };
+      return { from: m.from, to: m.to, promised, actual, kept: promised === actual, messageId: m.id };
     });
 }
 export async function resolvePhase(match: Match) {
@@ -312,23 +356,33 @@ export function startMatch(id: string, single = false, ticket?: string): Promise
             const key = `${round}:${power}`;
             if (pending.negotiated.includes(key) || !cp.state.board.units[power].length) continue;
             const legalOrders = ownLegalOrders(cp.state.legal, power);
-            const messages =
+            // Short references stand in for message ids on the wire; they map back here.
+            const refs = messageRefs(match, power);
+            const idOf = new Map(refs.map((r) => [r.ref, r.id]));
+            const messages: Omit<Dispatch, 'id'>[] =
               match.mode === 'live'
                 ? (
                     await askAgent(
                       match,
                       power,
                       'negotiate',
-                      negotiationSchemaFor(power, legalOrders),
+                      negotiationSchemaFor(power, legalOrders, refs.map((r) => r.ref)),
                     )
                   ).messages.map((m) => ({
-                    ...m,
+                    to: m.to,
+                    text: m.text,
+                    kind: m.kind,
                     promise: m.promise || undefined,
+                    replyTo: (m.replyTo && idOf.get(m.replyTo)) || undefined,
+                    response: m.response || undefined,
+                    request: m.request || undefined,
+                    provinces: m.provinces,
                     from: power,
                     round,
                   }))
                 : sampleMessages(match, power, round);
-            for (const m of messages) {
+            for (const raw of messages) {
+              const m = sanitizeDispatch(match, power, raw);
               if (m.to.includes(power)) throw new Error(`${power} attempted to message itself.`);
               // The schema already limits promises to legal orders; this check is the engine-side backstop.
               if (m.promise && !legalOrders.includes(m.promise))
@@ -393,18 +447,43 @@ export function startMatch(id: string, single = false, ticket?: string): Promise
   return job.promise;
 }
 export async function buildSample(): Promise<Match> {
-  const match = await createMatch('The fragile peace', 'sandbox', defaultConfigs(), {
+  const match = await createMatch(SAMPLE_NAME, 'sandbox', defaultConfigs(), {
     ...DEFAULT_LIMITS,
-    maxPhases: 9,
+    maxPhases: SAMPLE_PHASES,
   });
   await startMatch(match.id, false);
   const completed = getMatch(match.id);
   if (completed.status === 'error') throw new Error(completed.error);
   completed.mode = 'sample';
-  completed.name = 'The fragile peace';
+  completed.name = SAMPLE_NAME;
+  completed.sampleVersion = SAMPLE_VERSION;
   saveMatch(completed);
   return completed;
 }
+
+/** Name an older edition of the sample carries once a newer one exists. */
+export function earlierEditionName(name: string) {
+  return `${name.replace(/ · earlier edition.*$/, '')} · earlier edition`;
+}
+
+/**
+ * Makes sure the current edition of the authored sample exists. Older sample records are kept,
+ * because alternate timelines still compare against them, but renamed so they are never mistaken
+ * for the edition offered to newcomers. A record without `sampleVersion` is the first edition.
+ */
+export async function ensureSample(): Promise<Match | undefined> {
+  const samples = listMatches().filter((m) => m.mode === 'sample');
+  for (const row of samples)
+    if ((row.sampleVersion ?? 1) < SAMPLE_VERSION && !/ · earlier edition/.test(row.name)) {
+      const old = getMatch(row.id);
+      old.name = earlierEditionName(old.name);
+      old.sampleVersion = old.sampleVersion ?? 1;
+      saveMatch(old);
+    }
+  if (samples.some((m) => m.sampleVersion === SAMPLE_VERSION)) return undefined;
+  return buildSample();
+}
+
 /**
  * Deletes a saved game for good. Refused while the game is playing (a model request may still be
  * settling), and the recorded sample is kept as the teaching replay that every fresh install shows.
