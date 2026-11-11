@@ -1,30 +1,24 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { ArrowRight, ChevronDown, CircleHelp, GitBranch, X } from 'lucide-react';
-import { api } from './api';
-import { MODE_ARCHIVE, MODE_HINT, MODE_LABEL, phaseKind, phaseName } from './domain';
+import { ArrowRight, ChevronDown, CircleHelp, X } from 'lucide-react';
+import { api, removeGame } from './api';
+import { MODE_HINT, MODE_LABEL, phaseKind, phaseName } from './domain';
 import { deriveGuidedPhase } from './guided/events';
 import { guideReducer, initialGuide, pendingPhases } from './guided/reducer';
 import { INTRO_KEY, readFlag, readGuided, writeFlag, writeGuided } from './guided/prefs';
 import { type Match, type MatchSummary, type Power } from './types';
-import { Modal } from './components/Shared';
 import { Dossier } from './components/Dossier';
 import { Setup } from './components/Setup';
 import { Branch } from './components/Branch';
 import { Theater, type GuideActions } from './components/Theater';
 import { Playback } from './components/Playback';
 import { Help } from './components/Help';
-import { History } from './components/History';
+import { HistoricalComparison } from './components/HistoricalComparison';
+import { SavedGames } from './components/SavedGames';
 import { Chronicle, Comparison, Diplomacy } from './components/Views';
+import { Empty } from './components/Shared';
 import { useWatch } from './watch/useWatch';
 
-type Tab = 'Watch' | 'Messages' | 'Timeline' | 'Compared with history' | 'Alternate timeline';
-const TAB_LABEL: Record<Tab, string> = {
-  Watch: 'Watch',
-  Messages: 'Messages',
-  Timeline: 'Timeline',
-  'Compared with history': 'Compared with history',
-  'Alternate timeline': 'Alternate timeline',
-};
+type Tab = 'Watch' | 'Messages' | 'Timeline' | 'Compared with history' | 'Alternate timeline' | 'History';
 
 export default function App() {
   const [match, setMatch] = useState<Match>();
@@ -33,7 +27,7 @@ export default function App() {
   const [selected, setSelected] = useState<Power>('FRANCE');
   const [focus, setFocus] = useState<{ code: string; nonce: number }>();
   const [tab, setTab] = useState<Tab>('Watch');
-  const [modal, setModal] = useState<'setup' | 'branch' | 'dossier' | 'library' | 'help' | null>(null);
+  const [modal, setModal] = useState<'setup' | 'branch' | 'dossier' | 'help' | null>(null);
   const [setupMode, setSetupMode] = useState<'live' | 'sandbox'>();
   const [configured, setConfigured] = useState(false);
   const [parent, setParent] = useState<Match>();
@@ -58,6 +52,16 @@ export default function App() {
     },
   });
 
+  /** The original of an alternate timeline. If it was deleted, the child still plays; only the comparison is unavailable. */
+  const loadParent = useCallback(async (m: Match) => {
+    if (!m.parent) return undefined;
+    try {
+      return await api<Match>(`/matches/${m.parent.id}`);
+    } catch {
+      return undefined;
+    }
+  }, []);
+
   const refreshList = useCallback(async () => {
     const list = await api<MatchSummary[]>('/matches');
     setMatches(list);
@@ -74,7 +78,7 @@ export default function App() {
         currentId.current = m.id;
         setMatch(m);
         setIndex(at ?? (m.mode === 'sample' ? Math.min(1, m.turns.length) : m.turns.length));
-        setParent(m.parent ? await api<Match>(`/matches/${m.parent.id}`) : undefined);
+        setParent(await loadParent(m));
         follow.current = true;
         dispatchGuide({ type: 'reset', resolved: m.turns.length });
         localStorage.setItem('seven-powers-match', id);
@@ -277,8 +281,7 @@ export default function App() {
     setMatch(m);
     setIndex(m.turns.length);
     setTab(m.parent ? 'Alternate timeline' : 'Watch');
-    if (m.parent) void api<Match>(`/matches/${m.parent.id}`).then(setParent);
-    else setParent(undefined);
+    void loadParent(m).then(setParent);
     follow.current = true;
     dispatchGuide({ type: 'reset', resolved: m.turns.length });
     localStorage.setItem('seven-powers-match', m.id);
@@ -308,12 +311,45 @@ export default function App() {
     }
   }
 
+  /** Switching tabs never leaves a watch session running behind a page that is not showing it. */
+  function switchTab(next: Tab) {
+    if (next === 'History' && watch.playing) void watch.pause();
+    setTab(next);
+  }
+
+  /** Loads a saved game. Opening never starts it: only the Resume control in Watch sends a request. */
+  async function openGame(id: string, at?: number) {
+    if (watch.playing) void watch.pause();
+    setTab('Watch');
+    await load(id, at);
+  }
+
+  /** Deletes a saved game. If it was on screen, the view moves to the sample (or the first remaining game). */
+  async function deleteGame(game: MatchSummary) {
+    setBusy(true);
+    setError('');
+    try {
+      await removeGame(game.id);
+      const list = await refreshList();
+      if (currentId.current === game.id) {
+        currentId.current = '';
+        localStorage.removeItem('seven-powers-match');
+        const next = list.find((m) => m.mode === 'sample') || list[0];
+        if (next) await load(next.id);
+        else setMatch(undefined);
+      }
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function openSample() {
     const list = matches.length ? matches : await refreshList();
     const sample = list.find((m) => m.mode === 'sample');
     if (!sample) return;
-    setTab('Watch');
-    await load(sample.id, 1);
+    await openGame(sample.id, 1);
     if (guided) openTurn(0, 0);
   }
 
@@ -349,6 +385,7 @@ export default function App() {
 
   let statusText: string;
   if (pauseRequested) statusText = 'Pausing after the current model calls…';
+  else if (!watch.playing && watch.inFlight) statusText = 'Finishing the request already sent · nothing new will start';
   else if (watch.playing && running) statusText = 'Playing · a phase is in progress';
   else if (watch.playing) statusText = 'Playing · the next phase starts in a moment';
   else if (running) statusText = 'A phase is being played…';
@@ -373,9 +410,9 @@ export default function App() {
       <header className="topbar">
         <Brand />
         <nav aria-label="Main navigation">
-          {(['Watch', 'Messages', 'Timeline', 'Compared with history', ...(match.parent ? ['Alternate timeline'] : [])] as Tab[]).map((t) => (
-            <button key={t} onClick={() => setTab(t)} className={tab === t ? 'active' : ''} aria-current={tab === t ? 'page' : undefined}>
-              {TAB_LABEL[t]}
+          {(['Watch', 'Messages', 'Timeline', 'Compared with history', ...(match.parent ? ['Alternate timeline'] : []), 'History'] as Tab[]).map((t) => (
+            <button key={t} onClick={() => switchTab(t)} className={tab === t ? 'active' : ''} aria-current={tab === t ? 'page' : undefined}>
+              {t}
             </button>
           ))}
         </nav>
@@ -390,8 +427,9 @@ export default function App() {
             className="match-name"
             onClick={() => {
               void refreshList();
-              setModal('library');
+              switchTab('History');
             }}
+            title="Open History to switch games"
           >
             {match.name}
             <ChevronDown size={13} />
@@ -466,9 +504,9 @@ export default function App() {
           endBusy={busy}
           onSelect={setSelected}
           onLocate={(code) => setFocus((f) => ({ code, nonce: (f?.nonce ?? 0) + 1 }))}
-          onArchive={() => {
+          onHistory={() => {
             void refreshList();
-            setModal('library');
+            switchTab('History');
           }}
           onDossier={() => setModal('dossier')}
           onDiplomacy={() => setTab('Messages')}
@@ -501,8 +539,27 @@ export default function App() {
               }}
             />
           )}
-          {tab === 'Compared with history' && <History match={match} index={index} />}{' '}
-          {tab === 'Alternate timeline' && parent && <Comparison match={match} parent={parent} index={index} />}
+          {tab === 'Compared with history' && <HistoricalComparison match={match} index={index} />}{' '}
+          {tab === 'Alternate timeline' &&
+            (parent ? (
+              <Comparison match={match} parent={parent} index={index} />
+            ) : (
+              <Empty>
+                The original game was deleted, so this alternate timeline has nothing to compare against. It keeps its own
+                record and can still be watched or continued.
+              </Empty>
+            ))}
+          {tab === 'History' && (
+            <SavedGames
+              games={matches}
+              currentId={match.id}
+              busy={busy}
+              onOpen={(id, at) => void openGame(id, at)}
+              onStart={() => openSetup()}
+              onOpenSample={() => void openSample()}
+              onDelete={deleteGame}
+            />
+          )}
         </main>
       )}
       <Playback
@@ -542,7 +599,17 @@ export default function App() {
         />
       )}{' '}
       {modal === 'branch' && (
-        <Branch match={match} index={index} selected={selected} configured={configured} onClose={() => setModal(null)} onCreated={created} />
+        <Branch
+          match={match}
+          index={index}
+          selected={selected}
+          configured={configured}
+          onClose={() => setModal(null)}
+          onCreated={(m) => {
+            setModal(null);
+            created(m);
+          }}
+        />
       )}{' '}
       {modal === 'dossier' && (
         <Dossier
@@ -555,38 +622,6 @@ export default function App() {
             openTurn(index - 1, step);
           }}
         />
-      )}
-      {modal === 'library' && (
-        <Modal title="Saved games" onClose={() => setModal(null)}>
-          <div className="modal-body">
-            <p className="modal-lede">Every game you started is saved here. Sample and sandbox records never call a model.</p>
-            <div className="archive-list">
-              {matches.map((m) => (
-                <button
-                  key={m.id}
-                  onClick={() => {
-                    setModal(null);
-                    setTab('Watch');
-                    void load(m.id);
-                  }}
-                >
-                  <div>
-                    <strong>{m.name}</strong>
-                    <span>
-                      {MODE_ARCHIVE[m.mode]} · {m.phases} phases played · {new Date(m.createdAt).toLocaleDateString()}
-                    </span>
-                    {m.parent && (
-                      <small>
-                        <GitBranch size={11} /> Alternate timeline from moment {m.parent.at}
-                      </small>
-                    )}
-                  </div>
-                  <ArrowRight size={17} />
-                </button>
-              ))}
-            </div>
-          </div>
-        </Modal>
       )}
       {modal === 'help' && (
         <Help

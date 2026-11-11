@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   cleanGuidance,
+  DEFAULT_LIMITS,
   defaultConfigs,
   GUIDANCE_LIMITS,
   NATIONS,
@@ -18,15 +19,10 @@ import {
   type Turn,
 } from '../src/types.js';
 import { engine } from './engine.js';
-import { getMatch, saveMatch } from './store.js';
+import { deleteMatchRecord, getMatch, saveMatch } from './store.js';
 import { askAgent, decisionSchemaFor, negotiationSchemaFor, ownLegalOrders } from './provider.js';
 import { sampleDecision, sampleMessages } from './sample-agent.js';
-export const DEFAULT_LIMITS: Limits = {
-  maxPhases: 12,
-  budgetUsd: 5,
-  maxOutputTokens: 1800,
-  diplomacyRounds: 2,
-};
+export { DEFAULT_LIMITS };
 export async function createMatch(
   name: string,
   mode: Match['mode'],
@@ -393,6 +389,20 @@ export async function buildSample(): Promise<Match> {
   saveMatch(completed);
   return completed;
 }
+/**
+ * Deletes a saved game for good. Refused while the game is playing (a model request may still be
+ * settling), and the recorded sample is kept as the teaching replay that every fresh install shows.
+ * Alternate timelines keep working: their original's absence is shown, never treated as an error.
+ */
+export function removeMatch(id: string) {
+  const match = getMatch(id);
+  if (match.mode === 'sample')
+    throw Object.assign(new Error('The recorded sample is kept as a teaching replay and cannot be deleted.'), { status: 400 });
+  if (isActive(id) || match.status === 'running')
+    throw Object.assign(new Error('Pause the game before deleting it. A request may still be settling.'), { status: 409 });
+  deleteMatchRecord(id);
+}
+
 export function runningIds() {
   return [...active.keys()];
 }

@@ -1,11 +1,20 @@
 import {
   POWERS,
+  type Limits,
   type Match,
   type Power,
   type PowerMap,
   type AgentConfig,
   type Profile,
 } from './types';
+
+/** Defaults for a new game. Shared by the server, the setup form, and records written by older builds. */
+export const DEFAULT_LIMITS: Limits = {
+  maxPhases: 12,
+  budgetUsd: 5,
+  maxOutputTokens: 1800,
+  diplomacyRounds: 2,
+};
 export const NATIONS: Record<
   Power,
   {

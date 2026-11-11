@@ -24,7 +24,7 @@ const contexts = [
     url: 'https://www.warmuseum.ca/firstworldwar/history/going-to-war/origins-and-early-phases/',
   },
 ];
-export function History({ match, index }: { match: Match; index: number }) {
+export function HistoricalComparison({ match, index }: { match: Match; index: number }) {
   const cp = match.checkpoints[index];
   const pairs: { a: Power; b: Power; score: number }[] = [];
   for (let a = 0; a < POWERS.length; a++)

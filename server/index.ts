@@ -13,6 +13,7 @@ import {
   forkMatch,
   isActive,
   pauseMatch,
+  removeMatch,
   runningIds,
   startMatch,
 } from './simulation.js';
@@ -87,6 +88,10 @@ app.get('/api/matches/:id/export', (req, res) => {
   }
   res.setHeader('Content-Disposition', `attachment; filename="seven-powers-${match.id}.json"`);
   res.json({ format: 'seven-powers-v1', match: spectatorView(match) });
+});
+app.delete('/api/matches/:id', (req, res) => {
+  removeMatch(req.params.id);
+  res.json({ ok: true, deleted: req.params.id });
 });
 app.post('/api/matches', async (req, res) => {
   const input = z
@@ -187,7 +192,10 @@ app.use(
       return;
     }
     const message = error instanceof Error ? error.message : 'Unexpected server error.';
-    res.status(message === 'Match not found.' ? 404 : 400).json({ error: message });
+    const status = (error as { status?: number }).status;
+    res
+      .status(status ?? (message === 'Match not found.' ? 404 : 400))
+      .json({ error: message });
   },
 );
 if (!listMatches().some((m) => m.mode === 'sample')) {

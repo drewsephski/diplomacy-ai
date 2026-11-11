@@ -116,14 +116,36 @@ export interface Match {
   /** Optional shared briefing sent to every live country. Plain text, never rules. */
   briefing?: string;
 }
+/** How a saved game ended, read from its recorded position. Shared by the server summary and the History tab. */
+export type GameResult =
+  | { kind: 'sample' }
+  | { kind: 'running' }
+  | { kind: 'paused' }
+  | { kind: 'open' }
+  | { kind: 'won'; winner: Power; centers: number }
+  | { kind: 'limit' }
+  | { kind: 'budget' }
+  | { kind: 'draw' }
+  | { kind: 'error' };
+
+/** One row of the History tab. Deliberately small: no prompts, usage details, orders, or keys. */
 export interface MatchSummary {
   id: string;
   name: string;
   mode: Match['mode'];
+  /** Phases recorded so far. */
   phases: number;
+  /** The phase limit the game was created or last extended with. */
+  phaseLimit: number;
   createdAt: string;
   status: Match['status'];
   parent?: Match['parent'];
+  /** The original game this alternate timeline came from has been deleted. */
+  parentMissing: boolean;
+  result: GameResult;
+  /** Live model calls made, and the conservative cost in USD. Zero for sandbox and sample records. */
+  calls: number;
+  costUsd: number;
 }
 export interface PriceTier {
   /** Applies once the prompt reaches this many tokens. Rates are USD per token. */
