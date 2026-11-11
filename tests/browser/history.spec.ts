@@ -275,7 +275,10 @@ test('mobile History: no horizontal overflow and the row actions stay reachable'
   await createSandbox(request, 'A long name for a phone-sized history row that should wrap cleanly', 2);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
+  // On a phone the navigation lives in the menu sheet.
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
   await historyTab(page).click();
+  await expect(page.getByRole('heading', { name: 'History', exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await expect(page.getByRole('button', { name: /^Open A long name/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /^Delete A long name/ })).toBeVisible();

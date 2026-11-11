@@ -68,7 +68,9 @@ export function Branch({
   const [message, setMessage] = useState('');
   const [recipient, setRecipient] = useState<Power>(selected === 'ENGLAND' ? 'FRANCE' : 'ENGLAND');
   const [profile, setProfile] = useState<Profile>('diplomat');
-  const [mode, setModeState] = useState<Mode>(match.mode === 'live' && configured ? 'live' : 'sandbox');
+  const [mode, setModeState] = useState<Mode>(
+    match.mode === 'live' && configured ? 'live' : 'sandbox',
+  );
   const [budget, setBudget] = useState(match.limits.budgetUsd);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -131,7 +133,9 @@ export function Branch({
     <>
       <p>
         In the original, {NATIONS[power].name} ordered{' '}
-        {recorded.decisions[power].orders.length ? 'the following:' : 'nothing recorded for this phase.'}
+        {recorded.decisions[power].orders.length
+          ? 'the following:'
+          : 'nothing recorded for this phase.'}
       </p>
       <ul>
         {recorded.decisions[power].orders.map((o) => (
@@ -144,79 +148,95 @@ export function Branch({
     </>
   ) : null;
 
+  const timelines = (
+    <div className="branch-pair" aria-label="Timelines">
+      <div className="branch-checkpoint">
+        <GitBranch size={20} />
+        <div>
+          <span className="eyebrow">ORIGINAL</span>
+          <strong>{match.name}</strong>
+          <span>Stays as recorded</span>
+        </div>
+      </div>
+      <span className="branch-arrow" aria-hidden="true">
+        →
+      </span>
+      <div className="branch-checkpoint alternate">
+        <GitBranch size={20} />
+        <div>
+          <span className="eyebrow">ALTERNATE</span>
+          <strong>Continues from {season}</strong>
+          <span>Moment {at}, with positions and private notes as they were</span>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <Modal title={fixed ? fixed.question : 'What if one decision changed?'} onClose={onClose} wide>
       <form onSubmit={submit} className="whatif-form">
         <div className="modal-body">
           <p className="modal-lede">
-            Start an alternate timeline from {checkpointPhrase(cp.state.board.name)}. Your original record stays as it is.
+            Start an alternate timeline from {checkpointPhrase(cp.state.board.name)}. Your original
+            record stays as it is.
           </p>
-          <div className="branch-pair" aria-label="Timelines">
-            <div className="branch-checkpoint">
-              <GitBranch size={20} />
-              <div>
-                <span className="eyebrow">ORIGINAL</span>
-                <strong>{match.name}</strong>
-                <span>Stays as recorded</span>
-              </div>
-            </div>
-            <span className="branch-arrow" aria-hidden="true">
-              →
-            </span>
-            <div className="branch-checkpoint alternate">
-              <GitBranch size={20} />
-              <div>
-                <span className="eyebrow">ALTERNATE</span>
-                <strong>Continues from {season}</strong>
-                <span>Moment {at}, with positions and private notes as they were</span>
-              </div>
-            </div>
-          </div>
+          {!fixed && timelines}
 
           {terminal && (
             <p className="info-note" role="status">
-              This is the final position, so nothing can continue from it. Choose an earlier moment on the timeline to try a
-              different decision.
+              This is the final position, so nothing can continue from it. Choose an earlier moment
+              on the timeline to try a different decision.
             </p>
           )}
 
           {fixed ? (
-            <section className="whatif-compare" aria-label="The change">
-              <div>
-                <span className="eyebrow">WHAT CHANGES</span>
-                <p>{fixed.change}</p>
-              </div>
-              <div>
-                <span className="eyebrow">WHAT THE ORIGINAL RECORD SHOWS</span>
-                <p>{fixed.original}</p>
-              </div>
-              <p className="whatif-exact">
-                Exact change: <code>{fixed.intervention.order ?? describeIntervention(fixed.intervention)}</code>. Only this
-                one change is made; everything before {season} stays the same.
-              </p>
-              {unreadMessage && <p className="info-note">{SANDBOX_MESSAGE}</p>}
-              <button type="button" className="text-button" onClick={() => setUsePreset(false)}>
-                <PenLine size={13} /> Choose a different change instead
-              </button>
-            </section>
+            <>
+              <section className="whatif-compare" aria-label="The change">
+                <div>
+                  <span className="eyebrow">WHAT CHANGES</span>
+                  <p>{fixed.change}</p>
+                </div>
+                <div>
+                  <span className="eyebrow">WHAT THE ORIGINAL RECORD SHOWS</span>
+                  <p>{fixed.original}</p>
+                </div>
+                <p className="whatif-exact">
+                  Exact change:{' '}
+                  <code>
+                    {fixed.intervention.order ?? describeIntervention(fixed.intervention)}
+                  </code>
+                  . Only this one change is made; everything before {season} stays the same.
+                </p>
+                {unreadMessage && <p className="info-note">{SANDBOX_MESSAGE}</p>}
+                <button type="button" className="text-button" onClick={() => setUsePreset(false)}>
+                  <PenLine size={13} /> Choose a different change instead
+                </button>
+              </section>
+              {timelines}
+            </>
           ) : (
             <>
               {recorded &&
                 (revealed ? (
                   <div className="branch-context">
-                    <span className="eyebrow">WHAT THE ORIGINAL RECORD SHOWS · {season.toUpperCase()}</span>
+                    <span className="eyebrow">
+                      WHAT THE ORIGINAL RECORD SHOWS · {season.toUpperCase()}
+                    </span>
                     {originalOrders}
                   </div>
                 ) : (
                   <details className="branch-context branch-spoiler">
-                    <summary>Show what {NATIONS[power].name} ordered in the original {season} (reveals this phase’s orders)</summary>
+                    <summary>
+                      Show what {NATIONS[power].name} ordered in the original {season} (reveals this
+                      phase’s orders)
+                    </summary>
                     {originalOrders}
                   </details>
                 ))}
               {!recorded && !terminal && (
                 <p className="muted small-copy">
-                  This phase has not been resolved in the original, so no original orders exist yet. Your change will be the
-                  first decision recorded for it.
+                  This phase has not been resolved in the original, so no original orders exist yet.
+                  Your change will be the first decision recorded for it.
                 </p>
               )}
               <div className="segmented whatif-kinds" role="group" aria-label="Kind of change">
@@ -271,12 +291,15 @@ export function Branch({
                       )}
                     </Field>
                     <p className="muted small-copy">
-                      This order replaces {NATIONS[power].name}’s own choice for that unit when {season} resolves. The other
-                      countries cannot see the change before the reveal.
+                      This order replaces {NATIONS[power].name}’s own choice for that unit when{' '}
+                      {season} resolves. The other countries cannot see the change before the
+                      reveal.
                     </p>
                   </>
                 ) : (
-                  <p className="info-note">{NATIONS[power].name} has no unit that can be given an order at this moment.</p>
+                  <p className="info-note">
+                    {NATIONS[power].name} has no unit that can be given an order at this moment.
+                  </p>
                 ))}
               {kind === 'message' && mode === 'live' && (
                 <>
@@ -304,7 +327,8 @@ export function Branch({
                     />
                   </label>
                   <p className="muted small-copy">
-                    The message is delivered before this phase’s talks and is labelled as an observer intervention in the record.
+                    The message is delivered before this phase’s talks and is labelled as an
+                    observer intervention in the record.
                   </p>
                 </>
               )}
@@ -353,7 +377,11 @@ export function Branch({
               >
                 <Radio size={20} />
                 <strong>AI countries</strong>
-                <span>{configured ? caveat.live : 'Not available: the server has no OpenRouter key. The free sandbox works now.'}</span>
+                <span>
+                  {configured
+                    ? caveat.live
+                    : 'Not available: the server has no OpenRouter key. The free sandbox works now.'}
+                </span>
                 {mode === 'live' && <Check size={16} />}
               </button>
             </div>

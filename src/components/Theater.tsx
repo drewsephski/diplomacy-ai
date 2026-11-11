@@ -127,7 +127,7 @@ export function Theater(props: TheaterProps) {
         }
       : undefined;
 
-  const questions = questionsAt(match, index);
+  const questions = questionsAt(match, index, follow);
   /** Locating from a panel below the map brings the map back into view first (phones, tablets). */
   const mapRef = useRef<HTMLDivElement>(null);
   function locate(code: string) {
@@ -142,7 +142,8 @@ export function Theater(props: TheaterProps) {
 
   return (
     <main className="stage" data-phone-tab={phoneTab} data-desk-tab={deskTab}>
-      {props.showWelcome && (
+      {/* While a walkthrough is open the welcome steps aside, so the card over the map stays within the screen. */}
+      {props.showWelcome && !w && (
         <Welcome
           sampleAvailable={props.sampleAvailable}
           onWatch={props.onWelcomeWatch}

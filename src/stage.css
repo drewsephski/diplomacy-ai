@@ -478,7 +478,7 @@ body {
 }
 .stage .story .moment p,
 .stage .story-recap p {
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.55;
 }
 .stage .story .moment h4 {
@@ -1736,7 +1736,7 @@ body {
     flex: 1 1 auto;
   }
   .guide-card.sheet .guide-secondary .text-button {
-    min-height: 40px;
+    min-height: 44px;
     font-size: 13px;
   }
   .guide-compare {
@@ -2007,4 +2007,12 @@ body {
 .guide-card .cv-row-place {
   align-self: flex-start;
   margin: -4px 12px 10px 52px;
+}
+
+/* Tablet widths: the timeline and extra controls take their own row, so the bar never overflows the page. */
+@media (min-width: 761px) and (max-width: 1099px) {
+  .playback .playback-more {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
 }

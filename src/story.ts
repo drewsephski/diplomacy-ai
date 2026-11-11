@@ -335,10 +335,22 @@ export function buildStory(match: Match, turnIndex: number): Story | undefined {
       compare: { promised: promise.promised, actual: promise.actual },
     });
   }
+  // Kept promises whose order failed. Kept promises that bounced against each other in one place are
+  // one story (two fleets promised into the Black Sea), so they share a moment.
+  const failed = new Map<string, { promise: (typeof turn.promises)[number]; results: string[] }[]>();
+  const toldFailed = new Set<string>();
   for (const promise of turn.promises.filter((p) => p.kept)) {
-    const results = turn.results[describeOrder(promise.promised).unit];
-    if (results?.some((r) => LOSING.has(r))) {
-      counts.kept++;
+    counts.kept++;
+    const reading = describeOrder(promise.promised);
+    const results = turn.results[reading.unit];
+    if (!results?.some((r) => LOSING.has(r))) continue;
+    toldFailed.add(reading.unit);
+    const key = reading.kind === 'move' && reading.target && results.includes('bounce') ? reading.target : `${promise.from}-${promise.promised}`;
+    failed.set(key, [...(failed.get(key) ?? []), { promise, results }]);
+  }
+  for (const [key, group] of failed) {
+    if (group.length === 1) {
+      const { promise, results } = group[0];
       const reading = describeOrder(promise.promised);
       moments.push({
         id: `kept-failed-${promise.from}-${promise.promised}`,
@@ -350,9 +362,19 @@ export function buildStory(match: Match, turnIndex: number): Story | undefined {
         province: reading.origin,
         exact: promise.promised,
       });
-    } else {
-      counts.kept++;
+      continue;
     }
+    const names = group.map((g) => NATIONS[g.promise.from].name);
+    moments.push({
+      id: `kept-failed-group-${key}`,
+      tone: 'kept-failed',
+      label: 'Orders kept, outcome failed',
+      headline: `${names.slice(0, -1).join(', ')} and ${names.at(-1)} kept their word, and their moves bounced in ${provinceName(key)}`,
+      detail: `${group.map((g) => describeOrder(g.promise.promised).summary).join('. ')}. Each order matched its promise; equal forces met, so no unit entered.`,
+      power: group[0].promise.from,
+      province: key,
+      exact: group.map((g) => g.promise.promised).join(' · '),
+    });
   }
 
   // 2. Supply centers that changed hands between the two adjacent checkpoints.
@@ -394,7 +416,7 @@ export function buildStory(match: Match, turnIndex: number): Story | undefined {
     for (const order of turn.decisions[p].orders) {
       const reading = describeOrder(order);
       const results = turn.results[reading.unit];
-      if (reading.kind === 'move' && results?.includes('bounce')) {
+      if (reading.kind === 'move' && results?.includes('bounce') && !toldFailed.has(reading.unit)) {
         counts.standoffs++;
         const defender = reading.target ? occupantAt(before.state, reading.target) : undefined;
         moments.push({

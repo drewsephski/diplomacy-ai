@@ -60,7 +60,8 @@ test('the header mark is transparent at its corners and has no tile or halo', as
   });
   expect(corners.alphaCorners).toEqual([0, 0, 0, 0]);
   expect(corners.alphaCenter).toBeGreaterThan(200);
-  expect(corners.rendered).toBe(38);
+  // The compact desktop bar shows the mark at 32px (30px or less on phones).
+  expect(corners.rendered).toBe(32);
 });
 
 test('the mark stays readable and borderless on dark and light page backgrounds', async ({ page }) => {
@@ -74,7 +75,7 @@ test('the mark stays readable and borderless on dark and light page backgrounds'
   expect(width).toBe(true);
 });
 
-test('small sizes: the favicon tile and the header mark keep their silhouettes at 16 and 38 pixels', async ({ page }) => {
+test('small sizes: the favicon tile and the header mark keep their silhouettes at 16 and 32 pixels', async ({ page }) => {
   await page.goto('/');
   await page.locator('.brand-mark').waitFor();
   await page.setViewportSize({ width: 390, height: 700 });

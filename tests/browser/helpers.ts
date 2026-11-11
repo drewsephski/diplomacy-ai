@@ -110,6 +110,48 @@ export function trackTraffic(page: Page): Traffic {
   return t;
 }
 
+/** Phone layout (≤760px): navigation, Guided view, How to watch, and Set up a game live in the menu sheet. */
+export const isPhone = (page: Page) => (page.viewportSize()?.width ?? 1536) <= 760;
+
+/** Opens the phone menu sheet when the desktop navigation is hidden. No-op on desktop or when already open. */
+export async function openMenu(page: Page) {
+  if (!isPhone(page)) return;
+  if (await page.getByRole('dialog', { name: 'Menu' }).count()) return;
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Menu' })).toBeVisible();
+}
+
+/** Goes to a main tab on any viewport (through the menu sheet on phones). */
+export async function openTab(page: Page, name: string) {
+  await openMenu(page);
+  await navTab(page, name).click();
+}
+
+/** Opens the phone dock's timeline and extra controls (always visible on desktop). */
+export async function openMore(page: Page) {
+  const more = page.getByRole('button', { name: 'Timeline and more playback options' });
+  if ((await more.isVisible()) && (await more.getAttribute('aria-expanded')) !== 'true') await more.click();
+}
+
+/** Seeks to a moment through the timeline (opening the phone dock's extras first). */
+export async function seekMoment(page: Page, i: number) {
+  await openMore(page);
+  await page.getByRole('button', { name: new RegExp(`^Seek moment ${i}:`) }).click();
+}
+
+/** Opens Set up a game on any viewport. */
+export async function openSetupDialog(page: Page) {
+  await openMenu(page);
+  if (isPhone(page)) await page.getByRole('dialog', { name: 'Menu' }).getByRole('button', { name: /^Set up a game/ }).click();
+  else await page.locator('.new-simulation').click();
+}
+
+/** The number of phases in the newest sample edition, read from the API. */
+export async function samplePhases(request: APIRequestContext) {
+  const rows = (await (await request.get('/api/matches')).json()) as { id: string; mode: string; sampleVersion?: number; phases: number }[];
+  return rows.filter((g) => g.mode === 'sample').sort((a, b) => (b.sampleVersion ?? 1) - (a.sampleVersion ?? 1))[0].phases;
+}
+
 export const historyTab = (page: Page) =>
   page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: 'History', exact: true });
 export const navTab = (page: Page, name: string) =>
@@ -122,7 +164,7 @@ export const moment = async (page: Page) =>
 
 /** Opens a saved game from History. */
 export async function openFromHistory(page: Page, name: string, fromStart = false) {
-  await historyTab(page).click();
+  await openTab(page, 'History');
   await page.getByRole('button', { name: fromStart ? `Replay ${name} from the start` : `Open ${name}`, exact: true }).click();
   await expect(page.locator('.match-name')).toContainText(name);
 }

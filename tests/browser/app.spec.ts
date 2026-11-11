@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { mockLiveCatalog } from './helpers';
+import { mockLiveCatalog, navTab, openSetupDialog, samplePhases } from './helpers';
 
 /**
  * The expert view (guided view off) keeps the detailed story, timeline controls, and the replay
@@ -21,19 +21,22 @@ const nextCheckpoint = (page: Page) => page.getByRole('button', { name: 'Show th
 const noOverflow = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
 const setupButton = (page: Page) => page.locator('.new-simulation');
 
-test('sample is explorable; country details, commitments, private filters, history, and playback work', async ({
+test('sample is explorable; country details, commitments, conversations, history, and playback work', async ({
   page,
+  request,
 }) => {
+  const phases = await samplePhases(request);
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('/');
   await expect(page.getByText('YOU ARE THE OBSERVER')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Europe, on the brink.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^You watch\. Seven independent countries decide/ })).toBeVisible();
   await expect(page.getByText('RECORDED SAMPLE', { exact: true })).toBeVisible();
   await expect(page.locator('.europe-map .province')).toHaveCount(80);
   await page.locator('.europe-map .country-label').filter({ hasText: 'BRITAIN' }).click();
-  await expect(page.locator('.country-preview h2')).toHaveText('The British Empire');
-  await page.locator('.power-row').filter({ hasText: 'France' }).click();
+  await expect(page.locator('.follow-card h2')).toHaveText('The British Empire');
+  await page.getByRole('button', { name: /^France: \d+ supply centers/ }).click();
+  await expect(page.locator('.follow-card h2')).toHaveText('The French Republic');
   await page.getByRole('button', { name: 'Country details' }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
   await page.getByRole('button', { name: 'Orders & promises' }).click();
@@ -42,56 +45,66 @@ test('sample is explorable; country details, commitments, private filters, histo
   await page.getByRole('button', { name: 'Memory', exact: true }).click();
   await expect(page.getByText('We promised Britain an Atlantic move', { exact: false })).toBeVisible();
   await page.getByRole('button', { name: 'Close dialog' }).click();
-  await page.getByRole('button', { name: 'Messages', exact: true }).click();
-  await choose(page, 'View channels', 'France only');
-  await expect(page.locator('.dispatch')).toHaveCount(4);
-  await expect(page.locator('.diplomacy-columns').getByText('SECRET')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Compared with history', exact: true }).click();
+  await navTab(page, 'Conversations').click();
+  await expect(page.getByRole('heading', { name: 'Who is talking to whom' })).toBeVisible();
+  await page.getByRole('group', { name: 'Show conversations with' }).getByRole('button', { name: 'France', exact: true }).click();
+  // Only conversations France took part in remain, and none of them is labelled with a secret order.
+  for (const title of await page.locator('.cv-row-title').allInnerTexts()) expect(title).toContain('France');
+  await expect(page.locator('.cv-row')).not.toHaveCount(0);
+  await navTab(page, 'Compared with history').click();
   await expect(page.getByText('A strategic experiment, not a historical forecast.')).toBeVisible();
   await expect(page.locator('.history-context a')).toHaveCount(3);
-  await page.getByRole('button', { name: 'Watch', exact: true }).click();
+  await navTab(page, 'Watch').click();
   await page.getByRole('button', { name: 'Show revealed movement orders' }).click();
   await expect(page.getByRole('button', { name: 'Show revealed movement orders' })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: 'Seek moment 0: before Spring 1901' }).click();
-  await expect(page.locator('.timeline-labels')).toContainText('Moment 0 of 9');
+  await expect(page.locator('.timeline-labels')).toContainText(`Moment 0 of ${phases}`);
   await choose(page, 'Replay speed', '4×');
   await playRecorded(page).click();
-  await expect(page.locator('.timeline-labels')).toContainText('Moment 1 of 9');
+  await expect(page.locator('.timeline-labels')).toContainText(`Moment 1 of ${phases}`);
   await page.getByRole('button', { name: /^Pause the replay/ }).click();
   await nextCheckpoint(page).click();
-  await expect(page.locator('.timeline-labels')).toContainText('Moment 2 of 9');
+  await expect(page.locator('.timeline-labels')).toContainText(`Moment 2 of ${phases}`);
   expect(errors).toEqual([]);
 });
 
-test('a first-time observer sees the role and the next safe action; the card can be hidden and returns from help', async ({
+test('a first-time observer sees the role and one way in; the welcome can be hidden and returns from help', async ({
   page,
 }) => {
   await page.goto('/');
-  await expect(page.getByText('Seven countries compete for')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'You watch. Seven independent countries decide. Nothing waits for your orders.' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Watch the first negotiation/ })).toBeVisible();
+  // The welcome is a panel, not a modal: the map stays visible and nothing blocks it.
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.locator('.stage .europe-map')).toBeVisible();
   await expect(setupButton(page)).toBeVisible();
   await page.getByRole('button', { name: 'Hide this introduction' }).click();
   await expect(page.getByText('YOU ARE THE OBSERVER')).toHaveCount(0);
   await page.reload();
+  await expect(page.locator('.match-name')).toBeVisible();
   await expect(page.getByText('YOU ARE THE OBSERVER')).toHaveCount(0);
   await page.getByRole('button', { name: 'How to watch' }).click();
   await page.getByRole('button', { name: 'Show the welcome card again' }).click();
   await expect(page.getByText('YOU ARE THE OBSERVER')).toBeVisible();
 });
 
-test('recorded history never shows future messages, and the phase guide says so', async ({ page }) => {
+test('recorded history follows the moment rule: talks of the phase on screen are visible, its orders stay sealed', async ({ page, request }) => {
+  const phases = await samplePhases(request);
   await page.goto('/');
   // Opening at moment 1 shows the phase that resolved from moment 0.
-  await expect(page.locator('.timeline-labels')).toContainText('Moment 1 of 9');
-  await expect(page.locator('.phase-guide.history')).toContainText('EARLIER IN THE RECORD');
+  await expect(page.locator('.timeline-labels')).toContainText(`Moment 1 of ${phases}`);
   await page.getByRole('button', { name: 'Seek moment 0: before Spring 1901' }).click();
   await expect(page.getByText('Nothing has happened yet.')).toBeVisible();
-  await page.locator('.side-tabs').getByRole('button', { name: /^Messages/ }).click();
-  await expect(page.getByText('No messages yet.')).toBeVisible();
-  await expect(page.locator('.dispatch')).toHaveCount(0);
-  await page.getByRole('button', { name: 'What happened' }).click();
-  await page.getByRole('button', { name: 'Jump to the latest phase' }).click();
-  await expect(page.locator('.timeline-labels')).toContainText('Moment 9 of 9');
-  // The finished sample shows its end screen instead of the status strip.
+  await page.locator('.side-tabs').getByRole('button', { name: 'Talks' }).click();
+  // Spring 1901 talks are visible at its start, labelled as words only; no Spring 1901 order is shown.
+  await expect(page.locator('.talks-panel')).toContainText('Talks · Spring 1901');
+  await expect(page.locator('.talks-panel')).toContainText('The orders of this phase are still sealed at this moment.');
+  await expect(page.locator('.cv-row')).not.toHaveCount(0);
+  await expect(page.locator('.stage')).not.toContainText('F BRE - ENG');
+  await page.locator('.side-tabs').getByRole('button', { name: 'What happened' }).click();
+  await page.getByRole('button', { name: new RegExp(`^Seek moment ${phases}:`) }).click();
+  await expect(page.locator('.timeline-labels')).toContainText(`Moment ${phases} of ${phases}`);
+  // The finished sample shows its end screen instead of the phase guide.
   await expect(page.locator('.end-screen')).toContainText('The recorded sample has ended');
   await expect(page.locator('.phase-guide')).toHaveCount(0);
 });
@@ -110,22 +123,21 @@ test('the story explains a broken commitment, links it to the map and messages, 
   await expect(page.locator('.all-orders').getByText('F BRE - ENG', { exact: true })).toBeVisible();
 });
 
-/** Geometry of the first moment inside the story's own scroll viewport, with no scrolling. */
+/** Geometry of the first moment inside the story panel's own scroll viewport, with no scrolling. */
 const momentGeometry = (page: Page) =>
   page.evaluate(() => {
-    const scroll = document.querySelector('.dispatch-scroll')!;
+    const scroll = document.querySelector('.story-scroll')!;
     const box = (sel: string) => document.querySelector(sel)!.getBoundingClientRect();
     const view = scroll.getBoundingClientRect();
-    const within = (r: DOMRect) => r.top >= view.top - 0.5 && r.bottom <= view.bottom + 0.5 && r.height > 0;
-    const focus = box('.country-preview');
+    // The sticky playback bar covers the bottom of the page; what it covers is not "in view".
+    const bottom = Math.min(view.bottom, box('.playback').top, innerHeight);
+    const within = (r: DOMRect) => r.top >= view.top - 0.5 && r.bottom <= bottom + 0.5 && r.height > 0;
     return {
       scrollTop: scroll.scrollTop,
-      viewHeight: view.height,
-      innerHeight,
+      viewHeight: bottom - view.top,
       headline: within(box('.moment.broken h4')),
       promiseAction: within(box('.moment.broken .moment-compare')),
       actions: within(box('.moment.broken .moment-actions')),
-      stripClear: focus.top >= view.bottom - 0.5,
       headlineSize: parseFloat(getComputedStyle(document.querySelector('.moment.broken h4')!).fontSize),
       bodySize: parseFloat(getComputedStyle(document.querySelector('.moment.broken p')!).fontSize),
       labelSize: parseFloat(getComputedStyle(document.querySelector('.moment-label')!).fontSize),
@@ -135,6 +147,8 @@ const momentGeometry = (page: Page) =>
 test('desktop: the first moment and its promise-versus-action are visible without scrolling the story', async ({
   page,
 }) => {
+  // A returning viewer: the first-visit welcome is hidden, so the stage fits the screen.
+  await page.addInitScript(() => localStorage.setItem('seven-powers-intro-hidden', '1'));
   await page.setViewportSize({ width: 1536, height: 1024 });
   await page.goto('/');
   await expect(page.locator('.moment.broken h4')).toBeVisible();
@@ -144,7 +158,6 @@ test('desktop: the first moment and its promise-versus-action are visible withou
   expect(g.headline).toBe(true);
   expect(g.promiseAction).toBe(true);
   expect(g.actions).toBe(true);
-  expect(g.stripClear).toBe(true);
   // Readable sizes: body at least 12px, moment labels and eyebrows at least 9px.
   expect(g.bodySize).toBeGreaterThanOrEqual(12);
   expect(g.headlineSize).toBeGreaterThanOrEqual(18);
@@ -152,20 +165,19 @@ test('desktop: the first moment and its promise-versus-action are visible withou
   expect(await noOverflow(page)).toBe(true);
 });
 
-test('shorter desktop: headline and promise row stay in view, and the actions are one scroll away', async ({
+test('shorter desktop: headline and promise row stay in view, and the actions are reachable', async ({
   page,
 }) => {
+  // A returning viewer: the first-visit welcome is hidden, so the stage fits the screen.
+  await page.addInitScript(() => localStorage.setItem('seven-powers-intro-hidden', '1'));
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/');
   await expect(page.locator('.moment.broken h4')).toBeVisible();
   const before = await momentGeometry(page);
   expect(before.headline).toBe(true);
   expect(before.promiseAction).toBe(true);
-  // The region scrolls rather than clipping; the actions are reachable inside it.
   await page.locator('.moment.broken .moment-actions').scrollIntoViewIfNeeded();
-  const after = await momentGeometry(page);
-  expect(after.actions).toBe(true);
-  expect(after.scrollTop).toBeGreaterThan(0);
+  await expect(page.locator('.moment.broken .moment-actions')).toBeInViewport();
   await expect(page.getByRole('button', { name: 'Country details' })).toBeVisible();
   expect(await noOverflow(page)).toBe(true);
 });
@@ -190,7 +202,7 @@ test('a live phase in progress shows only observed progress: talk counts and sea
         status: 'running',
         pending: {
           round: 0,
-          messages: m.turns.at(-1).messages.slice(0, 2),
+          messages: m.turns[0].messages.slice(0, 2),
           negotiated: ['0:ENGLAND', '0:FRANCE', '0:GERMANY', '0:ITALY'],
           decisions: {},
           sealedCount: 2,
@@ -201,12 +213,15 @@ test('a live phase in progress shows only observed progress: talk counts and sea
   await page.goto('/');
   const guide = page.locator('.phase-guide.live');
   await expect(guide).toContainText('HAPPENING NOW');
-  await expect(guide).toContainText('Agents are working on this phase');
+  await expect(guide).toContainText('The countries are playing this phase · you are watching');
   await expect(guide).toContainText('Round 1 of 2 · 4 of 14 conversations');
   await expect(guide).toContainText('2 of 7 sealed · contents stay secret until the phase resolves');
   await expect(page.getByRole('button', { name: /^Pause game/ })).toBeVisible();
-  // No sealed order text appears anywhere in the live phase view.
-  await expect(page.locator('.dispatch-panel')).not.toContainText('Committed order');
+  // Promises in the live talks read as sealed words; no submitted order text appears anywhere.
+  await page.locator('.side-tabs').getByRole('button', { name: 'Talks' }).click();
+  await expect(page.locator('.talks-panel')).toContainText('The orders of this phase are still sealed at this moment.');
+  await expect(page.locator('.talks-panel')).toContainText('sealed');
+  await expect(page.locator('.stage')).not.toContainText('Committed order');
 });
 
 test('the pivotal event leads to advancing the moment and trying a different decision from that exact moment', async ({
@@ -216,6 +231,9 @@ test('the pivotal event leads to advancing the moment and trying a different dec
   await page.getByRole('button', { name: 'Seek moment 0: before Spring 1901' }).click();
   await page.getByRole('button', { name: 'Try a different decision' }).click();
   await expect(page.getByRole('dialog').getByText('ORIGINAL', { exact: true })).toBeVisible();
+  // Spring 1901's orders are not revealed at moment 0, so the original orders wait behind a disclosure.
+  await expect(page.getByRole('dialog').getByText('In the original, France ordered')).toBeHidden();
+  await page.getByRole('dialog').getByText(/reveals this phase’s orders/).click();
   await expect(page.getByRole('dialog').getByText('In the original, France ordered')).toBeVisible();
   await choose(page, 'Replace one legal order', 'Fleet Brest moves to Mid-Atlantic Ocean');
   await page.getByRole('button', { name: 'Create alternate timeline', exact: true }).click();
@@ -378,53 +396,57 @@ test('sandbox is labelled as free local policies: start game plays to the phase 
 });
 
 test('opening the app never starts a model run or changes the record', async ({ page, request }) => {
+  const phases = await samplePhases(request);
   await page.goto('/');
-  await expect(page.locator('.timeline-labels')).toContainText('Moment 1 of 9');
+  await expect(page.locator('.timeline-labels')).toContainText(`Moment 1 of ${phases}`);
   await page.waitForTimeout(1500);
   await expect(page.locator('.match-status')).not.toContainText('working');
   const id = await page.evaluate(() => localStorage.getItem('seven-powers-match'));
   const match = await (await request.get(`/api/matches/${id}`)).json();
   expect(match.status).toBe('complete');
-  expect(match.turns.length).toBe(9);
+  expect(match.turns.length).toBe(phases);
 });
 
-test('mobile has no horizontal overflow, guidance stacks, and custom listboxes stay on screen', async ({ page }) => {
+test('mobile has no horizontal overflow, the dock and story tabs work, and custom listboxes stay on screen', async ({ page }) => {
   await mockLiveCatalog(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Europe, on the brink.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^You watch\. Seven independent countries decide/ })).toBeVisible();
   expect(await noOverflow(page)).toBe(true);
-  await expect(page.locator('.phase-guide')).toBeVisible();
-  // The first moment reads in full on a phone: its headline and promise row sit inside the
-  // screen width, and the in-focus strip begins only after the story ends.
+  // The playback dock is fixed to the bottom of the screen with a full-size primary control.
+  const dock = await page.evaluate(() => {
+    const bar = document.querySelector('.playback')!;
+    const play = document.querySelector('.play-button')!.getBoundingClientRect();
+    return { position: getComputedStyle(bar).position, bottom: bar.getBoundingClientRect().bottom, playHeight: play.height };
+  });
+  expect(dock.position).toBe('fixed');
+  expect(dock.bottom).toBeLessThanOrEqual(844 + 1);
+  expect(dock.playHeight).toBeGreaterThanOrEqual(44);
+  // The first moment reads in full on a phone: its headline and promise row sit inside the screen width.
   const phone = await page.evaluate(() => {
     const row = document.querySelector('.moment.broken .moment-compare')!.getBoundingClientRect();
-    const story = document.querySelector('.dispatch-scroll')!.getBoundingClientRect();
-    const focus = document.querySelector('.country-preview')!.getBoundingClientRect();
     const headline = document.querySelector('.moment.broken h4')!.getBoundingClientRect();
     return {
       headlineInScreen: headline.left >= 0 && headline.right <= innerWidth,
       rowInScreen: row.left >= 0 && row.right <= innerWidth,
-      stripAfterStory: focus.top >= story.bottom - 0.5,
       headlineSize: parseFloat(getComputedStyle(document.querySelector('.moment.broken h4')!).fontSize),
+      bodySize: parseFloat(getComputedStyle(document.querySelector('.moment.broken p')!).fontSize),
     };
   });
   expect(phone.headlineInScreen).toBe(true);
   expect(phone.rowInScreen).toBe(true);
-  expect(phone.stripAfterStory).toBe(true);
   expect(phone.headlineSize).toBeGreaterThanOrEqual(18);
-  expect(
-    await page.evaluate(
-      () =>
-        document.querySelector('.playback-panel')!.getBoundingClientRect().top >=
-        document.querySelector('.dispatch-panel')!.getBoundingClientRect().bottom - 1,
-    ),
-  ).toBe(true);
-  await page.getByRole('button', { name: 'Country details' }).click();
+  expect(phone.bodySize).toBeGreaterThanOrEqual(15);
+  const tabs = page.getByRole('group', { name: 'Below the map' });
+  await tabs.getByRole('button', { name: 'Talks' }).click();
+  await expect(page.locator('.talks-panel')).toBeVisible();
+  await tabs.getByRole('button').nth(2).click();
+  await expect(page.locator('.follow-card')).toBeVisible();
+await page.getByRole('button', { name: 'Country details' }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
   expect(await noOverflow(page)).toBe(true);
   await page.getByRole('button', { name: 'Close dialog' }).click();
-  await setupButton(page).click();
+  await openSetupDialog(page);
   await expect(page.getByLabel('Game name')).toBeVisible();
   expect(await noOverflow(page)).toBe(true);
 

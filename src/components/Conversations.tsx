@@ -308,6 +308,8 @@ function ThreadRow({
   const kept = c.commitments.filter((k) => k.status === 'kept').length;
   const broken = c.commitments.filter((k) => k.status === 'broken').length;
   const sealed = c.commitments.filter((k) => k.status === 'sealed').length;
+  // Open items without the sealed promises, which the meta line already counts as sealed.
+  const unanswered = c.open.length - c.commitments.filter((k) => k.status === 'sealed' && k.turn === c.lastTurn).length;
   return (
     <li className={`cv-row ${active ? 'active' : ''} ${c.group ? 'group' : 'pair'}`}>
       <button type="button" className="cv-row-main" onClick={() => onOpen(c.id)} aria-current={active ? 'true' : undefined}>
@@ -325,7 +327,7 @@ function ThreadRow({
             {sealed > 0 && ` · ${sealed} sealed`}
             {kept > 0 && ` · ${kept} kept`}
             {broken > 0 && ` · ${broken} broken`}
-            {c.open.length > 0 && ` · ${c.open.length} open`}
+            {unanswered > 0 && ` · ${unanswered} unanswered`}
           </span>
         </span>
       </button>
