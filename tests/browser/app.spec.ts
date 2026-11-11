@@ -1,5 +1,13 @@
 import { test, expect, type Page } from '@playwright/test';
 
+/**
+ * The expert view (guided view off) keeps the detailed story, timeline controls, and the replay
+ * timer. Guided behaviour has its own specs in journey.spec.ts and guided.spec.ts.
+ */
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('seven-powers-guided', '0'));
+});
+
 /** Opens a custom listbox by its accessible label and picks an option by visible text. */
 async function choose(page: Page, label: string, option: string) {
   await page.getByRole('combobox', { name: label, exact: false }).click();
@@ -8,12 +16,11 @@ async function choose(page: Page, label: string, option: string) {
 }
 
 const playRecorded = (page: Page) => page.getByRole('button', { name: /^Play recorded phases/ });
-const nextCheckpoint = (page: Page) =>
-  page.getByRole('button', { name: 'Show the next recorded checkpoint' });
-const noOverflow = (page: Page) =>
-  page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
+const nextCheckpoint = (page: Page) => page.getByRole('button', { name: 'Show the next recorded moment' });
+const noOverflow = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
+const setupButton = (page: Page) => page.locator('.new-simulation');
 
-test('sample is explorable; dossiers, commitments, private filters, history, and playback work', async ({
+test('sample is explorable; country details, commitments, private filters, history, and playback work', async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -26,37 +33,32 @@ test('sample is explorable; dossiers, commitments, private filters, history, and
   await page.locator('.europe-map .country-label').filter({ hasText: 'BRITAIN' }).click();
   await expect(page.locator('.country-preview h2')).toHaveText('The British Empire');
   await page.locator('.power-row').filter({ hasText: 'France' }).click();
-  await page.getByRole('button', { name: 'Open country dossier' }).click();
+  await page.getByRole('button', { name: 'Country details' }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
   await page.getByRole('button', { name: 'Orders & promises' }).click();
   await expect(page.getByText('Promise broken', { exact: true })).toBeVisible();
   await expect(page.getByRole('dialog').getByText('F BRE - MAO', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Memory', exact: true }).click();
-  await expect(
-    page.getByText('We promised Britain an Atlantic move', { exact: false }),
-  ).toBeVisible();
+  await expect(page.getByText('We promised Britain an Atlantic move', { exact: false })).toBeVisible();
   await page.getByRole('button', { name: 'Close dialog' }).click();
-  await page.getByRole('button', { name: 'Diplomacy', exact: true }).click();
+  await page.getByRole('button', { name: 'Messages', exact: true }).click();
   await choose(page, 'View channels', 'France only');
   await expect(page.locator('.dispatch')).toHaveCount(4);
   await expect(page.locator('.diplomacy-columns').getByText('SECRET')).toHaveCount(0);
   await page.getByRole('button', { name: 'Compared with history', exact: true }).click();
   await expect(page.getByText('A strategic experiment, not a historical forecast.')).toBeVisible();
   await expect(page.locator('.history-context a')).toHaveCount(3);
-  await page.getByRole('button', { name: 'The theater', exact: true }).click();
+  await page.getByRole('button', { name: 'Watch', exact: true }).click();
   await page.getByRole('button', { name: 'Show revealed movement orders' }).click();
-  await expect(page.getByRole('button', { name: 'Show revealed movement orders' })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
-  await page.getByRole('button', { name: 'Seek checkpoint 0: start of Spring 1901' }).click();
-  await expect(page.getByText('Checkpoint 0 of 9')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Show revealed movement orders' })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'Seek moment 0: before Spring 1901' }).click();
+  await expect(page.getByText('Moment 0 of 9')).toBeVisible();
   await choose(page, 'Replay speed', '4×');
   await playRecorded(page).click();
-  await expect(page.getByText('Checkpoint 1 of 9')).toBeVisible();
+  await expect(page.getByText('Moment 1 of 9')).toBeVisible();
   await page.getByRole('button', { name: /^Pause the replay/ }).click();
   await nextCheckpoint(page).click();
-  await expect(page.getByText('Checkpoint 2 of 9')).toBeVisible();
+  await expect(page.getByText('Moment 2 of 9')).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -64,10 +66,8 @@ test('a first-time observer sees the role and the next safe action; the card can
   page,
 }) => {
   await page.goto('/');
-  await expect(page.getByText('Seven countries negotiate in private')).toBeVisible();
-  await expect(
-    page.getByRole('button', { name: 'Start a live match with AI agents' }),
-  ).toBeVisible();
+  await expect(page.getByText('Seven countries compete for')).toBeVisible();
+  await expect(setupButton(page)).toBeVisible();
   await page.getByRole('button', { name: 'Hide this introduction' }).click();
   await expect(page.getByText('YOU ARE THE OBSERVER')).toHaveCount(0);
   await page.reload();
@@ -77,25 +77,25 @@ test('a first-time observer sees the role and the next safe action; the card can
   await expect(page.getByText('YOU ARE THE OBSERVER')).toBeVisible();
 });
 
-test('recorded history never shows future dispatches, and the phase guide says so', async ({
-  page,
-}) => {
+test('recorded history never shows future messages, and the phase guide says so', async ({ page }) => {
   await page.goto('/');
-  // Opening at checkpoint 1 shows the phase that resolved from checkpoint 0.
-  await expect(page.getByText('Checkpoint 1 of 9')).toBeVisible();
-  await expect(page.locator('.phase-guide.history')).toContainText('RECORDED HISTORY');
-  await page.getByRole('button', { name: 'Seek checkpoint 0: start of Spring 1901' }).click();
-  await expect(page.getByText('Nothing has resolved yet.')).toBeVisible();
-  await page.getByRole('button', { name: 'Dispatches' }).click();
-  await expect(page.getByText('No negotiations yet.')).toBeVisible();
+  // Opening at moment 1 shows the phase that resolved from moment 0.
+  await expect(page.getByText('Moment 1 of 9')).toBeVisible();
+  await expect(page.locator('.phase-guide.history')).toContainText('EARLIER IN THE RECORD');
+  await page.getByRole('button', { name: 'Seek moment 0: before Spring 1901' }).click();
+  await expect(page.getByText('Nothing has happened yet.')).toBeVisible();
+  await page.getByRole('button', { name: 'Messages' }).click();
+  await expect(page.getByText('No messages yet.')).toBeVisible();
   await expect(page.locator('.dispatch')).toHaveCount(0);
   await page.getByRole('button', { name: 'What happened' }).click();
-  await page.getByRole('button', { name: 'Jump to the live edge' }).click();
-  await expect(page.getByText('Checkpoint 9 of 9')).toBeVisible();
-  await expect(page.locator('.phase-guide')).toContainText('Match complete');
+  await page.getByRole('button', { name: 'Jump to the latest phase' }).click();
+  await expect(page.getByText('Moment 9 of 9')).toBeVisible();
+  // The finished sample shows its end screen instead of the status strip.
+  await expect(page.locator('.end-screen')).toContainText('The recorded sample has ended');
+  await expect(page.locator('.phase-guide')).toHaveCount(0);
 });
 
-test('the story explains a broken commitment, links it to the map and dispatches, and the exact order stays visible', async ({
+test('the story explains a broken commitment, links it to the map and messages, and the exact order stays visible', async ({
   page,
 }) => {
   await page.goto('/');
@@ -115,8 +115,7 @@ const momentGeometry = (page: Page) =>
     const scroll = document.querySelector('.dispatch-scroll')!;
     const box = (sel: string) => document.querySelector(sel)!.getBoundingClientRect();
     const view = scroll.getBoundingClientRect();
-    const within = (r: DOMRect) =>
-      r.top >= view.top - 0.5 && r.bottom <= view.bottom + 0.5 && r.height > 0;
+    const within = (r: DOMRect) => r.top >= view.top - 0.5 && r.bottom <= view.bottom + 0.5 && r.height > 0;
     const focus = box('.country-preview');
     return {
       scrollTop: scroll.scrollTop,
@@ -126,9 +125,7 @@ const momentGeometry = (page: Page) =>
       promiseAction: within(box('.moment.broken .moment-compare')),
       actions: within(box('.moment.broken .moment-actions')),
       stripClear: focus.top >= view.bottom - 0.5,
-      headlineSize: parseFloat(
-        getComputedStyle(document.querySelector('.moment.broken h4')!).fontSize,
-      ),
+      headlineSize: parseFloat(getComputedStyle(document.querySelector('.moment.broken h4')!).fontSize),
       bodySize: parseFloat(getComputedStyle(document.querySelector('.moment.broken p')!).fontSize),
       labelSize: parseFloat(getComputedStyle(document.querySelector('.moment-label')!).fontSize),
     };
@@ -168,7 +165,7 @@ test('shorter desktop: headline and promise row stay in view, and the actions ar
   const after = await momentGeometry(page);
   expect(after.actions).toBe(true);
   expect(after.scrollTop).toBeGreaterThan(0);
-  await expect(page.getByRole('button', { name: 'Open country dossier' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Country details' })).toBeVisible();
   expect(await noOverflow(page)).toBe(true);
 });
 
@@ -205,26 +202,26 @@ test('a live phase in progress shows only observed progress: talk counts and sea
   await expect(guide).toContainText('HAPPENING NOW');
   await expect(guide).toContainText('Agents are working on this phase');
   await expect(guide).toContainText('Round 1 of 2 · 4 of 14 conversations');
-  await expect(guide).toContainText('2 of 7 sealed · contents stay secret until resolution');
-  await expect(page.getByRole('button', { name: /^Pause agents/ })).toBeVisible();
+  await expect(guide).toContainText('2 of 7 sealed · contents stay secret until the phase resolves');
+  await expect(page.getByRole('button', { name: /^Pause game/ })).toBeVisible();
   // No sealed order text appears anywhere in the live phase view.
   await expect(page.locator('.dispatch-panel')).not.toContainText('Committed order');
 });
 
-test('the pivotal event leads to advancing the checkpoint and branching from that exact moment', async ({
+test('the pivotal event leads to advancing the moment and trying a different decision from that exact moment', async ({
   page,
 }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Seek checkpoint 0: start of Spring 1901' }).click();
-  await page.getByRole('button', { name: 'Branch from this checkpoint' }).click();
+  await page.getByRole('button', { name: 'Seek moment 0: before Spring 1901' }).click();
+  await page.getByRole('button', { name: 'Try a different decision' }).click();
   await expect(page.getByRole('dialog').getByText('ORIGINAL', { exact: true })).toBeVisible();
   await expect(page.getByRole('dialog').getByText('In the original, France ordered')).toBeVisible();
   await choose(page, 'Replace one legal order', 'Fleet Brest moves to Mid-Atlantic Ocean');
   await page.getByRole('button', { name: 'Create alternate timeline', exact: true }).click();
   await expect(page.getByText('A different decision. A different Europe.')).toBeVisible();
-  await page.getByRole('button', { name: 'Run one sandbox phase', exact: true }).click();
-  await expect(page.getByText('Checkpoint 1 of 1')).toBeVisible();
-  await expect(page.locator('.match-status')).toContainText('Idle');
+  await page.getByRole('button', { name: /^Play one sandbox phase/ }).click();
+  await expect(page.getByText('Moment 1 of 1')).toBeVisible();
+  await expect(page.locator('.match-status')).toContainText('Paused');
 });
 
 test('custom listbox keyboard flow: arrows, Enter, Escape closes only the list, focus stays on the trigger', async ({
@@ -265,17 +262,16 @@ test('custom listbox keyboard flow: arrows, Enter, Escape closes only the list, 
   await expect(speed).toContainText('2×');
 });
 
-test('dialog keeps Escape for open listboxes, closes on Escape, and returns focus to its opener', async ({
-  page,
-}) => {
+test('dialog keeps Escape for open listboxes, closes on Escape, and returns focus to its opener', async ({ page }) => {
   await page.goto('/');
-  const opener = page.getByRole('button', { name: 'New simulation' });
+  const opener = setupButton(page);
   await opener.focus();
   await page.keyboard.press('Enter');
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
-  await expect(page.getByLabel('Match name')).toBeFocused();
+  await expect(page.getByLabel('Game name')).toBeFocused();
   // Open the France profile listbox from the keyboard, then Escape: list closes, dialog stays.
+  await page.getByText('Advanced: models, behaviour, and each country').click();
   const profile = page.getByRole('combobox', { name: 'France behavioral profile' });
   await profile.focus();
   await page.keyboard.press('Enter');
@@ -299,25 +295,16 @@ test('click outside an open listbox closes it without changing the value', async
   await expect(speed).toContainText('1×');
 });
 
-test('setup defaults to GLM 5.3 Flash, offers economical presets, and filters the model catalog', async ({
-  page,
-}) => {
+test('setup defaults to GLM 5.3 Flash, offers economical presets, and filters the model catalog', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'New simulation' }).click();
-  await expect(page.getByRole('combobox', { name: 'Britain model' })).toHaveValue(
-    'z-ai/glm-5.3-flash',
-  );
+  await setupButton(page).click();
+  await page.getByText('Advanced: models, behaviour, and each country').click();
+  await expect(page.getByRole('combobox', { name: 'Britain model' })).toHaveValue('z-ai/glm-5.3-flash');
   await page.getByRole('button', { name: /Economical mix/ }).click();
-  await expect(page.getByRole('combobox', { name: 'Britain model' })).toHaveValue(
-    'z-ai/glm-5.3-flash',
-  );
-  await expect(page.getByRole('combobox', { name: 'France model' })).toHaveValue(
-    'anthropic/claude-haiku-5.5',
-  );
+  await expect(page.getByRole('combobox', { name: 'Britain model' })).toHaveValue('z-ai/glm-5.3-flash');
+  await expect(page.getByRole('combobox', { name: 'France model' })).toHaveValue('anthropic/claude-haiku-5.5');
   await page.getByRole('button', { name: /Haiku 5.5 only/ }).click();
-  await expect(page.getByRole('combobox', { name: 'Turkey model' })).toHaveValue(
-    'anthropic/claude-haiku-5.5',
-  );
+  await expect(page.getByRole('combobox', { name: 'Turkey model' })).toHaveValue('anthropic/claude-haiku-5.5');
   // Free text is accepted and Escape restores the last committed value.
   const germany = page.getByRole('combobox', { name: 'Germany model' });
   await germany.fill('vendor/custom-model');
@@ -326,7 +313,9 @@ test('setup defaults to GLM 5.3 Flash, offers economical presets, and filters th
   await germany.fill('vendor/custom-model');
   await page.keyboard.press('Enter');
   await expect(germany).toHaveValue('vendor/custom-model');
-  // Stepper: typing a value and using the increment control keep the limit in range.
+  // Stepper: on the Length step, typing a value and using the increment control keep the limit in range.
+  await page.getByRole('button', { name: 'Next' }).click();
+  await page.getByRole('button', { name: 'Next' }).click();
   const phases = page.getByLabel('Phase limit', { exact: true });
   await phases.fill('12');
   await page.getByRole('button', { name: 'Increase phase limit' }).click();
@@ -334,68 +323,57 @@ test('setup defaults to GLM 5.3 Flash, offers economical presets, and filters th
   await page.getByRole('button', { name: 'Close dialog' }).click();
 });
 
-test('branch an exact checkpoint, replace an order, resolve, compare, reload, and export', async ({
-  page,
-  request,
-}) => {
+test('branch an exact moment, replace an order, play one phase, compare, reload, and export', async ({ page, request }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'Seek checkpoint 0: start of Spring 1901' }).click();
-  await page.getByRole('button', { name: 'Branch from this checkpoint' }).click();
+  await page.getByRole('button', { name: 'Seek moment 0: before Spring 1901' }).click();
+  await page.getByRole('button', { name: 'Try a different decision' }).click();
   await choose(page, 'Replace one legal order', 'Fleet Brest moves to Mid-Atlantic Ocean');
   await page.getByRole('button', { name: 'Create alternate timeline', exact: true }).click();
   await expect(page.getByText('A different decision. A different Europe.')).toBeVisible();
-  await page.getByRole('button', { name: 'Run one sandbox phase', exact: true }).click();
-  await expect(page.getByText('Checkpoint 1 of 1')).toBeVisible();
-  await expect(page.locator('.match-status')).toContainText('Idle');
+  await page.getByRole('button', { name: /^Play one sandbox phase/ }).click();
+  await expect(page.getByText('Moment 1 of 1')).toBeVisible();
+  await expect(page.locator('.match-status')).toContainText('Paused');
   const id = await page.evaluate(() => localStorage.getItem('seven-powers-match'));
   const match = await (await request.get(`/api/matches/${id}`)).json();
   expect(match.checkpoints[1].state.board.units.FRANCE).toContain('F MAO');
-  expect(match.turns[0].promises.find((p: { from: string }) => p.from === 'FRANCE').kept).toBe(
-    true,
-  );
+  expect(match.turns[0].promises.find((p: { from: string }) => p.from === 'FRANCE').kept).toBe(true);
   const original = await (await request.get(`/api/matches/${match.parent.id}`)).json();
   expect(original.checkpoints[1].state.board.units.FRANCE).toContain('F ENG');
   await page.reload();
-  await expect(page.getByText('Checkpoint 1 of 1')).toBeVisible();
+  await expect(page.getByText('Moment 1 of 1')).toBeVisible();
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Export complete replay' }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toMatch(/seven-powers-.*\.json/);
 });
 
-test('sandbox runs are labelled as local policies, advance one phase at a time, and stop at the limit', async ({
+test('sandbox is labelled as free local policies: start game plays to the phase limit, then says why it stopped', async ({
   page,
 }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'New simulation' }).click();
-  await page.getByRole('button', { name: 'Local sandbox', exact: false }).click();
-  const matchName = `Browser flow verification ${Date.now()}`;
-  await page.getByLabel('Match name').fill(matchName);
+  await setupButton(page).click();
+  await page.getByRole('button', { name: /No-cost sandbox/ }).click();
+  const gameName = `Browser flow verification ${Date.now()}`;
+  await page.getByLabel('Game name').fill(gameName);
+  await page.getByRole('button', { name: 'Next' }).click();
+  // The guidance step explains that the sandbox does not read written guidance.
+  await expect(page.getByText('cannot read written guidance', { exact: false })).toBeVisible();
+  await page.getByRole('button', { name: 'Next' }).click();
   await page.getByLabel('Phase limit', { exact: true }).fill('3');
-  await page.getByRole('button', { name: 'Create simulation' }).click();
+  await page.getByRole('button', { name: 'Next' }).click();
+  await page.getByRole('button', { name: 'Start game', exact: true }).click();
   await expect(page.getByText('LOCAL SANDBOX', { exact: true })).toBeVisible();
-  // A new sandbox sits at the live edge with no phase run yet, and the guide says what comes next.
-  await expect(page.locator('.phase-guide.next')).toContainText('NEXT PHASE');
-  await expect(page.locator('.phase-guide.next')).toContainText('Private talks');
-  await page.getByRole('button', { name: 'Run one sandbox phase', exact: true }).click();
-  await expect(page.getByText('Checkpoint 1 of 1')).toBeVisible();
-  await expect(page.locator('.match-status')).toContainText('Idle');
-  await page.getByRole('button', { name: /^Run the local sandbox/ }).click();
-  await expect(page.getByText('Checkpoint 3 of 3')).toBeVisible();
-  await expect(page.locator('.match-status')).toContainText('Match complete');
-  await expect(
-    page.getByRole('button', { name: 'Match complete: no further phases to run', exact: true }),
-  ).toBeDisabled();
-  await page.getByRole('button', { name: 'Match archive', exact: false }).click();
-  await expect(page.getByRole('dialog').getByText(matchName, { exact: true })).toBeVisible();
+  // Start game plays on, one phase at a time, to the limit the viewer chose.
+  await expect(page.getByText('Moment 3 of 3')).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator('.end-screen')).toContainText('Stopped at the phase limit');
+  await expect(page.getByRole('button', { name: 'Game over' })).toBeDisabled();
+  await page.getByRole('button', { name: 'Saved games', exact: false }).click();
+  await expect(page.getByRole('dialog').getByText(gameName, { exact: true })).toBeVisible();
 });
 
-test('opening the app never starts a model run or changes the record', async ({
-  page,
-  request,
-}) => {
+test('opening the app never starts a model run or changes the record', async ({ page, request }) => {
   await page.goto('/');
-  await expect(page.getByText('Checkpoint 1 of 9')).toBeVisible();
+  await expect(page.getByText('Moment 1 of 9')).toBeVisible();
   await page.waitForTimeout(1500);
   await expect(page.locator('.match-status')).not.toContainText('working');
   const id = await page.evaluate(() => localStorage.getItem('seven-powers-match'));
@@ -404,9 +382,7 @@ test('opening the app never starts a model run or changes the record', async ({
   expect(match.turns.length).toBe(9);
 });
 
-test('mobile has no horizontal overflow, guidance stacks, and custom listboxes stay on screen', async ({
-  page,
-}) => {
+test('mobile has no horizontal overflow, guidance stacks, and custom listboxes stay on screen', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Europe, on the brink.' })).toBeVisible();
@@ -423,9 +399,7 @@ test('mobile has no horizontal overflow, guidance stacks, and custom listboxes s
       headlineInScreen: headline.left >= 0 && headline.right <= innerWidth,
       rowInScreen: row.left >= 0 && row.right <= innerWidth,
       stripAfterStory: focus.top >= story.bottom - 0.5,
-      headlineSize: parseFloat(
-        getComputedStyle(document.querySelector('.moment.broken h4')!).fontSize,
-      ),
+      headlineSize: parseFloat(getComputedStyle(document.querySelector('.moment.broken h4')!).fontSize),
     };
   });
   expect(phone.headlineInScreen).toBe(true);
@@ -439,15 +413,16 @@ test('mobile has no horizontal overflow, guidance stacks, and custom listboxes s
         document.querySelector('.dispatch-panel')!.getBoundingClientRect().bottom - 1,
     ),
   ).toBe(true);
-  await page.getByRole('button', { name: 'Open country dossier' }).click();
+  await page.getByRole('button', { name: 'Country details' }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
   expect(await noOverflow(page)).toBe(true);
   await page.getByRole('button', { name: 'Close dialog' }).click();
-  await page.getByRole('button', { name: 'New simulation' }).click();
-  await expect(page.getByLabel('Match name')).toBeVisible();
+  await setupButton(page).click();
+  await expect(page.getByLabel('Game name')).toBeVisible();
   expect(await noOverflow(page)).toBe(true);
 
   // Presets and a custom model listbox both fit the phone width.
+  await page.getByText('Advanced: models, behaviour, and each country').click();
   await page.getByRole('button', { name: /Haiku 5.5 only/ }).click();
   const germany = page.getByRole('combobox', { name: 'Germany model' });
   await germany.click();
