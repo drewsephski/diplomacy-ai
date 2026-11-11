@@ -1,0 +1,14 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "inter",
+        "createdAt": "2026-11-11T01:33:19.863Z",
+        "reason": "Intentional design: docs/DESIGN.md specifies locally served Inter for UI chrome, controls and data, paired with Cormorant Garamond for editorial type. Not a default pick. Attribution unknown; decision recorded from project design doc, not user confirmation."
+      }
+    ]
+  }
+}

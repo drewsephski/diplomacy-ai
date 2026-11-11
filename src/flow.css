@@ -1,0 +1,539 @@
+/*
+ * Setup, guided walkthrough, watch controls, and end-of-game styles. Loaded last, so it can refine
+ * the earlier layers. Colors reuse the design tokens on :root; motion respects reduced-motion.
+ */
+
+/* ---------- Guided card over the map ---------- */
+.guide-card {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 6;
+  width: min(410px, calc(100% - 28px));
+  max-height: calc(100% - 28px);
+  display: flex;
+  flex-direction: column;
+  background: #101b21ee;
+  border: 1px solid #c7aa7470;
+  border-radius: 4px;
+  box-shadow: 0 18px 46px #05090cb3;
+  backdrop-filter: blur(6px);
+  overflow: hidden;
+}
+.guide-card.collapsed {
+  max-height: none;
+}
+.guide-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px 8px 16px;
+  flex: none;
+}
+.guide-kicker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold);
+  min-width: 0;
+}
+.guide-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+}
+.guide-head-actions {
+  display: flex;
+  gap: 2px;
+}
+.guide-progress {
+  height: 2px;
+  margin: 0 16px;
+  background: #c7b58c26;
+  flex: none;
+}
+.guide-progress i {
+  display: block;
+  height: 100%;
+  background: var(--gold);
+  transition: width 0.25s ease;
+}
+.guide-body {
+  padding: 12px 16px 6px;
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1 1 auto;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.guide-body[hidden] {
+  display: none;
+}
+.guide-label {
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #b9b29b;
+}
+.guide-card h3 {
+  margin: 4px 0 8px;
+  font-family: var(--serif);
+  font-size: 23px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: #f1ead8;
+}
+.guide-card h3:focus {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+}
+.guide-countries {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+.guide-countries li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.guide-countries .crest {
+  width: 20px;
+  height: 20px;
+  font-size: 9px;
+}
+.guide-section h4,
+.guide-subhead {
+  margin: 10px 0 3px;
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--gold);
+  font-weight: 600;
+}
+.guide-section p,
+.guide-summary-line,
+.guide-next {
+  margin: 0;
+  color: #dedfd9;
+}
+.guide-quote {
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border-left: 2px solid var(--gold);
+  background: #c7b58c0d;
+}
+.guide-quote blockquote {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 17px;
+  font-style: italic;
+  color: #efe6cf;
+}
+.guide-quote figcaption {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.guide-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.guide-compare span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 7px 9px;
+  border: 1px solid #c7b58c26;
+  border-radius: 3px;
+}
+.guide-compare code,
+.guide-exact code {
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  font-size: 12px;
+  color: #e2bf7d;
+}
+.guide-exact {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.guide-exact summary {
+  cursor: pointer;
+}
+.guide-exact ul {
+  margin: 6px 0 0;
+  padding-left: 16px;
+}
+.guide-overflow {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+}
+.guide-summary-line,
+.guide-next {
+  margin-top: 8px;
+}
+.guide-term {
+  min-height: 1.4em;
+  margin: 10px 0 4px;
+  font-size: 12px;
+  color: #d9d2bf;
+}
+.guide-term b {
+  color: var(--gold);
+  font-weight: 600;
+}
+.guide-foot {
+  flex: none;
+  padding: 10px 14px 12px;
+  border-top: 1px solid #c7b58c26;
+  background: #0d161b;
+}
+.guide-nav {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.guide-nav .button {
+  min-height: 40px;
+}
+.guide-secondary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 8px;
+  font-size: 12px;
+}
+.term {
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  text-decoration: underline dotted #c7aa74aa;
+  text-underline-offset: 3px;
+  cursor: help;
+}
+.term:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+.guide-target {
+  stroke: #f4e2b0 !important;
+  stroke-width: 3.2 !important;
+  stroke-opacity: 1 !important;
+  animation: guide-pulse 1.8s ease-in-out infinite;
+}
+@keyframes guide-pulse {
+  50% {
+    stroke-opacity: 0.45;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .guide-target,
+  .guide-progress i {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* Narrow screens: the card becomes a bottom sheet over the lower map, and can be collapsed. */
+@media (max-width: 760px) {
+  .guide-card {
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    width: auto;
+    max-height: min(64%, 420px);
+  }
+  .guide-card.collapsed {
+    max-height: none;
+  }
+  .guide-body {
+    font-size: 15px;
+  }
+  .guide-card h3 {
+    font-size: 22px;
+  }
+}
+
+/* ---------- Walkthrough entry points ---------- */
+.guide-ready {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border: 1px solid #c7aa7460;
+  border-radius: 3px;
+  background: #c7aa7412;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+.guide-launch {
+  margin-top: 6px;
+  font-size: 13px;
+}
+.guide-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 4px 10px;
+  border: 1px solid #c7b58c40;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.guide-switch.on {
+  color: #f1ead8;
+  border-color: var(--gold);
+  background: #c7aa7418;
+}
+.guide-switch b {
+  font-weight: 600;
+}
+.created-on {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ---------- Watch-side details ---------- */
+.briefing-note,
+.who-is {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: #d9d2bf;
+}
+.briefing-note summary,
+.who-is summary {
+  cursor: pointer;
+  color: var(--gold);
+  font-size: 12px;
+}
+.briefing-note p,
+.who-is p {
+  margin: 6px 0 0;
+  line-height: 1.45;
+}
+.who-is-moments {
+  margin: 6px 0 0;
+  padding-left: 16px;
+  font-size: 12px;
+}
+.who-is-moments .text-button {
+  text-align: left;
+}
+.glossary {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+}
+.glossary dt {
+  font-weight: 600;
+  color: #f1ead8;
+}
+.glossary dd {
+  margin: 0;
+  color: #d9d2bf;
+  font-size: 13px;
+}
+
+/* ---------- End of game ---------- */
+.end-screen {
+  padding: 14px 18px;
+  border: 1px solid #c7aa7460;
+  border-radius: 3px;
+  background: linear-gradient(120deg, #1a2930, #141f25);
+}
+.end-screen h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 6px;
+  font-family: var(--serif);
+  font-size: 26px;
+  font-weight: 500;
+  color: #f1ead8;
+}
+.end-screen p {
+  margin: 0;
+  max-width: 78ch;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.end-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+/* ---------- Setup wizard ---------- */
+.wizard {
+  display: grid;
+  gap: 14px;
+}
+.wizard-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.wizard-steps li button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 12px;
+  border: 1px solid #c7b58c40;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.wizard-steps li[aria-current='step'] button {
+  color: #f1ead8;
+  border-color: var(--gold);
+  background: #c7aa7418;
+}
+.wizard-steps li.done button {
+  color: #d9d2bf;
+}
+.wizard-steps span[aria-hidden='true'] {
+  font-weight: 600;
+}
+.wizard-panel {
+  display: grid;
+  gap: 14px;
+  min-height: 260px;
+}
+.wizard-panel h3 {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 26px;
+  font-weight: 500;
+  color: #f1ead8;
+}
+.wizard-foot {
+  justify-content: space-between;
+}
+.wizard-foot .button.start-game {
+  min-width: 170px;
+  min-height: 44px;
+  justify-content: center;
+}
+.button.ghost {
+  background: transparent;
+  border-color: #c7b58c40;
+}
+.advanced {
+  border: 1px solid #c7b58c26;
+  border-radius: 3px;
+  padding: 8px 12px;
+}
+.advanced summary {
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--gold);
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+}
+.advanced-body {
+  display: grid;
+  gap: 12px;
+  padding: 10px 0 4px;
+}
+.instruction-grid {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+.instruction-grid textarea,
+.wizard textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.45;
+  color: #f1ead8;
+  background: #0d161b;
+  border: 1px solid #c7b58c40;
+  border-radius: 3px;
+  padding: 9px 11px;
+}
+.field-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--muted);
+}
+.example-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.review {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+.review > div {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #c7b58c20;
+}
+.review dt {
+  color: var(--gold);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.review dd {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+@media (max-width: 760px) {
+  .review > div {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+  .wizard-foot {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+  .wizard-foot .button {
+    justify-content: center;
+  }
+}

@@ -1,0 +1,8 @@
+node_modules
+dist
+.venv
+data
+.test-data
+src/map-data.json
+pnpm-lock.yaml
+docs/licenses
