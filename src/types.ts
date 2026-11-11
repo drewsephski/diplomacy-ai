@@ -41,6 +41,18 @@ export interface Dispatch {
   text: string;
   kind: 'proposal' | 'reply' | 'threat' | 'alliance';
   promise?: string;
+  /**
+   * Id of an earlier message, visible to the sender, that this message answers. Recorded by the
+   * sender (live agent or authored sample). Absent on records written before threading existed;
+   * readers then infer links and must label them as inferred.
+   */
+  replyTo?: string;
+  /** How this message answers `replyTo`, as the sender stated it. Never inferred from text. */
+  response?: 'accept' | 'counter' | 'decline';
+  /** What the sender asks the recipients to do, in the sender's own words. Plain text. */
+  request?: string;
+  /** Base province codes the sender says the message concerns (validated against the map). */
+  provinces?: string[];
 }
 export interface Decision {
   orders: string[];
@@ -54,6 +66,8 @@ export interface PromiseCheck {
   promised: string;
   actual: string;
   kept: boolean;
+  /** Id of the dispatch that made the promise. Absent on older records (match by from + promised). */
+  messageId?: string;
 }
 export interface Usage {
   calls: number;
@@ -111,7 +125,17 @@ export interface Match {
   usage: Usage;
   limits: Limits;
   pending?: PendingPhase;
-  parent?: { id: string; name: string; at: number };
+  parent?: {
+    id: string;
+    name: string;
+    at: number;
+    /** The one change this alternate timeline made, kept after the intervention is applied. */
+    intervention?: Intervention;
+    /** The viewer-facing question that started it, such as "What if France had kept its promise?" */
+    question?: string;
+  };
+  /** Version of the authored sample this record was built from. Only set on sample records. */
+  sampleVersion?: number;
   intervention?: Intervention;
   /** Optional shared briefing sent to every live country. Plain text, never rules. */
   briefing?: string;
@@ -143,6 +167,8 @@ export interface MatchSummary {
   /** The original game this alternate timeline came from has been deleted. */
   parentMissing: boolean;
   result: GameResult;
+  /** Version of the authored sample, for sample records. The newest is the one offered to newcomers. */
+  sampleVersion?: number;
   /** Live model calls made, and the conservative cost in USD. Zero for sandbox and sample records. */
   calls: number;
   costUsd: number;
