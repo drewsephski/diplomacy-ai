@@ -1,0 +1,480 @@
+/*
+ * Custom controls. These replace every native <select> so that dropdowns, comboboxes, and
+ * steppers share one editorial look: warm borders, gold focus rings, and listboxes that are
+ * positioned and keyboard-driven by the components in src/components/ui.
+ */
+
+/* ---------- Field scaffolding ---------- */
+.field {
+  font-size: 10px;
+  color: #adb8b2;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin: 19px 0;
+  min-width: 0;
+}
+.field-label {
+  letter-spacing: 0.4px;
+}
+.field-hint {
+  font-size: 10px;
+  line-height: 1.6;
+  color: #7f8e91;
+}
+.field input,
+.field textarea {
+  width: 100%;
+}
+input,
+textarea {
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+input:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px #c7aa7422;
+}
+input:disabled,
+textarea:disabled {
+  opacity: 0.5;
+}
+.filter-bar .field {
+  margin: 0;
+  flex-direction: row;
+  align-items: center;
+  gap: 13px;
+}
+.filter-select {
+  width: 270px;
+}
+
+/* ---------- Shared trigger look ---------- */
+.select-trigger,
+.combobox-field {
+  border: 1px solid #4c5a5b;
+  border-radius: 3px;
+  background: #172329;
+  color: #d4d8d1;
+  font-size: 12px;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.select-trigger:hover:not(:disabled),
+.combobox-field:hover {
+  border-color: #c7aa7480;
+}
+.select.open .select-trigger,
+.combobox.open .combobox-field,
+.combobox-field:focus-within {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px #c7aa7422;
+}
+.select-trigger:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+}
+
+/* ---------- Select (select-only combobox) ---------- */
+.select {
+  position: relative;
+  min-width: 0;
+  width: 100%;
+}
+.select-trigger {
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 11px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  text-align: left;
+}
+.select-trigger:hover:not(:disabled) {
+  color: #d4d8d1;
+}
+.select-trigger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.select-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.select-value.placeholder {
+  color: #7d898c;
+}
+.select-chevron {
+  flex-shrink: 0;
+  color: var(--gold);
+  transition: transform 0.15s;
+}
+.select.open .select-chevron {
+  transform: rotate(180deg);
+}
+.select-list,
+.combobox-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  min-width: 100%;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  max-height: 300px;
+  overflow-y: auto;
+  background: #0f181e;
+  border: 1px solid #c7aa7460;
+  border-radius: 4px;
+  box-shadow: 0 18px 44px #00000080;
+  scrollbar-width: thin;
+  scrollbar-color: #465356 transparent;
+}
+.select.flip .select-list {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+.select-list {
+  width: max-content;
+  max-width: min(340px, calc(100vw - 40px));
+}
+.select-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 9px 10px;
+  border-radius: 3px;
+  font-size: 12px;
+  color: #c9d0cc;
+  cursor: pointer;
+}
+.select-option.active {
+  background: #c7aa741c;
+  color: #f1e3c4;
+}
+.select-option[aria-selected='true'] {
+  color: #e9d7b0;
+}
+.select-option[aria-selected='true'] svg {
+  color: var(--gold);
+  flex-shrink: 0;
+}
+.select-option.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.select-option-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.select-option-text small {
+  font-size: 10px;
+  color: #7f8e91;
+  margin-top: 2px;
+}
+.speed-select {
+  width: 80px;
+  flex: 0 0 80px;
+}
+.speed-select .select-list {
+  left: auto;
+  right: 0;
+}
+.playback-controls > button {
+  flex-shrink: 0;
+}
+.playback-controls .select-trigger {
+  min-height: 34px;
+  padding: 6px 8px;
+  gap: 6px;
+  font-size: 11px;
+  color: #c8bc9d;
+  border-color: #c7aa7455;
+  background: #172228;
+}
+
+/* ---------- Combobox (filterable model picker) ---------- */
+.combobox {
+  position: relative;
+  min-width: 0;
+}
+.combobox-field {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+}
+.combobox input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 9px 11px;
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-size: 11px;
+  color: #d4d8d1;
+  box-shadow: none;
+}
+.combobox input:focus {
+  box-shadow: none;
+}
+.combobox input::placeholder {
+  color: #6f7d80;
+  font-family: 'Inter Variable', sans-serif;
+  font-size: 11px;
+}
+.combobox-toggle {
+  width: 34px;
+  display: grid;
+  place-items: center;
+  color: var(--gold);
+  border-left: 1px solid #4c5a5b66;
+  flex-shrink: 0;
+}
+.combobox-toggle:disabled {
+  opacity: 0.35;
+}
+.combobox-list {
+  width: max-content;
+  min-width: 100%;
+  max-width: min(440px, calc(100vw - 40px));
+}
+.combobox-option {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #c9d0cc;
+}
+.combobox-option.active {
+  background: #c7aa741c;
+  color: #f1e3c4;
+}
+.combobox-option[aria-selected='true'] {
+  box-shadow: inset 2px 0 0 var(--gold);
+}
+.combobox-option-name {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 14px;
+}
+.combobox-option-name code {
+  font-size: 10px;
+  color: #7f8e91;
+}
+.combobox-option small {
+  font-size: 10px;
+  color: #9cab9f;
+  font-variant-numeric: tabular-nums;
+}
+.combobox-empty {
+  padding: 10px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #8f9a9e;
+}
+
+/* ---------- Stepper (numeric limits) ---------- */
+.stepper {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 36px;
+  min-height: 40px;
+  border: 1px solid #4c5a5b;
+  border-radius: 3px;
+  background: #172329;
+  overflow: hidden;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.stepper:focus-within {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px #c7aa7422;
+}
+.stepper button {
+  display: grid;
+  place-items: center;
+  color: var(--gold);
+}
+.stepper button:hover:not(:disabled) {
+  background: #c7aa7414;
+  color: #f1d7a6;
+}
+.stepper button:disabled {
+  opacity: 0.3;
+}
+.stepper input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  box-shadow: none;
+  padding: 9px 4px;
+}
+.stepper input:focus {
+  box-shadow: none;
+}
+.stepper.disabled {
+  opacity: 0.5;
+}
+
+/* ---------- Setup: presets, cost context, agent rows ---------- */
+.text-actions {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.preset-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 6px;
+}
+.preset-caption {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 9px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+.preset-chip {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  padding: 12px 13px;
+  text-align: left;
+  border: 1px solid #4a5b5e;
+  border-radius: 3px;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+.preset-chip strong {
+  font-size: 11px;
+  font-weight: 500;
+  color: #dbddd7;
+}
+.preset-chip span {
+  font-size: 10px;
+  line-height: 1.5;
+  color: #8fa0a2;
+}
+.preset-chip:hover:not(:disabled) {
+  border-color: #c7aa74aa;
+  color: inherit;
+}
+.preset-chip.active {
+  border-color: var(--gold);
+  background: #c7aa740d;
+}
+.preset-chip:disabled {
+  opacity: 0.35;
+}
+.cost-status {
+  margin: 14px 0 0;
+  font-size: 10px;
+  line-height: 1.6;
+  color: #8fa0a2;
+}
+.agent-row {
+  padding: 11px 0;
+}
+.agent-name {
+  font-size: 11px;
+  color: #d4d8d1;
+}
+.agent-cost {
+  grid-column: 2 / -1;
+  font-size: 10px;
+  line-height: 1.5;
+  color: #8fa0a2;
+  margin-top: -4px;
+  font-variant-numeric: tabular-nums;
+}
+.agent-row .combobox,
+.agent-row .select {
+  min-width: 0;
+}
+
+/* ---------- Focus, accessibility, and mobile ---------- */
+button:focus-visible,
+a:focus-visible,
+[role='combobox']:focus-visible,
+[role='option']:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+}
+.segmented button[aria-pressed='true'],
+.mode-options button[aria-pressed='true'] {
+  color: #f1e3c4;
+}
+
+@media (max-width: 640px) {
+  .agent-row {
+    grid-template-columns: 25px minmax(0, 1fr);
+    gap: 9px;
+  }
+  .agent-row .agent-name {
+    grid-column: 2;
+  }
+  .agent-row .combobox,
+  .agent-row .select,
+  .agent-row .agent-cost {
+    grid-column: 1 / -1;
+  }
+  .agent-cost {
+    margin-top: 0;
+  }
+  .preset-row {
+    grid-template-columns: 1fr;
+  }
+  .preset-chip {
+    padding: 11px 12px;
+  }
+  .filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+  }
+  .filter-bar .field {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .filter-select {
+    width: 100%;
+  }
+  .limits-row {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .select-list,
+  .combobox-list {
+    max-width: calc(100vw - 60px);
+  }
+  .combobox-option-name {
+    flex-direction: column;
+    gap: 2px;
+  }
+}
