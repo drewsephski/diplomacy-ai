@@ -252,6 +252,7 @@ export function deriveGuidedPhase(match: Match, turnIndex: number): GuidedPhase 
 
   // 1. Promises: the record checks each promise against the submitted order.
   const keptClean: { promise: (typeof turn.promises)[number]; reading: OrderReading; quote?: { from: Power; text: string } }[] = [];
+  const keptFailed: { promise: (typeof turn.promises)[number]; reading: OrderReading; outcome: string[]; quote?: { from: Power; text: string }; recipients: string; focusHighlight: string[] }[] = [];
   for (const promise of turn.promises) {
     const quoteMessage = turn.messages.find((m) => m.from === promise.from && m.promise === promise.promised);
     const quote = quoteMessage ? { from: promise.from, text: quoteMessage.text } : undefined;
@@ -286,7 +287,19 @@ export function deriveGuidedPhase(match: Match, turnIndex: number): GuidedPhase 
       continue;
     }
     const outcome = tokensOf(reading.unit);
-    if (outcome.some((t) => LOSING.has(t))) {
+    if (outcome.some((t) => LOSING.has(t))) keptFailed.push({ promise, reading, outcome, quote, recipients, focusHighlight });
+    else keptClean.push({ promise, reading, quote });
+  }
+  // Kept promises whose orders failed. Two kept promises that bounced against each other in the same
+  // place are one story (for example, two fleets promised into the Black Sea), so they share an event.
+  const failedGroups = new Map<string, typeof keptFailed>();
+  for (const k of keptFailed) {
+    const place = k.reading.kind === 'move' && k.reading.target && k.outcome.includes('bounce') ? k.reading.target : `${k.promise.from}-${k.promise.promised}`;
+    failedGroups.set(place, [...(failedGroups.get(place) ?? []), k]);
+  }
+  for (const [place, group] of failedGroups) {
+    if (group.length === 1) {
+      const { promise, reading, outcome, quote, recipients, focusHighlight } = group[0];
       add(
         {
           kind: 'kept-promise-failed',
@@ -302,9 +315,26 @@ export function deriveGuidedPhase(match: Match, turnIndex: number): GuidedPhase 
         },
         `${promise.from}-${promise.promised}`,
       );
-    } else {
-      keptClean.push({ promise, reading, quote });
+      continue;
     }
+    const names = group.map((k) => NATIONS[k.promise.from].name);
+    const who = `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+    add(
+      {
+        kind: 'kept-promise-failed',
+        headline: `${who} ${group.length === 2 ? 'both' : 'all'} kept their word, and their moves bounced in ${placeIn(place)}`,
+        happened: `${group
+          .map((k) => `${NATIONS[k.promise.from].name} told ${k.recipients} it would ${orderPhrase(k.promise.promised)}.`)
+          .join(' ')} ${group.length === 2 ? 'Both' : 'All'} orders were submitted exactly as promised. Equal forces met in ${placeIn(place)}, so no unit entered.`,
+        matters: 'A kept promise is about the order, not the result. Keeping one’s word does not make a move succeed.',
+        powers: [...new Set(group.flatMap((k) => [k.promise.from, ...k.promise.to]))],
+        focus: place,
+        highlight: [...new Set(group.flatMap((k) => k.focusHighlight))],
+        exact: group.map((k) => k.promise.promised),
+        quote: group[0].quote,
+      },
+      `group-${place}`,
+    );
   }
   // Successful kept promises are grouped into one event so a phase never opens with a stack of them.
   if (keptClean.length === 1) {
@@ -344,12 +374,35 @@ export function deriveGuidedPhase(match: Match, turnIndex: number): GuidedPhase 
     );
   }
 
-  // 2. Supply centers that changed hands, grouped per country so each country gets one popup.
+  // 2. Supply centers that changed hands, grouped per country so each country gets one popup. When more
+  // than three countries gained (typically the first autumn's neutral grab), the gains share one event.
+  const gainers = POWERS.filter((p) => after.state.board.centers[p].some((c) => !before.state.board.centers[p].includes(c)));
+  const groupGains = gainers.length > 3;
+  if (groupGains) {
+    const lines = gainers.map((p) => {
+      const gained = after.state.board.centers[p].filter((c) => !before.state.board.centers[p].includes(c));
+      return `${NATIONS[p].name} took ${gained.map((c) => provinceName(c)).join(' and ')} (now ${after.state.board.centers[p].length} of 18)`;
+    });
+    const all = gainers.flatMap((p) => after.state.board.centers[p].filter((c) => !before.state.board.centers[p].includes(c)));
+    add(
+      {
+        kind: 'center-gained',
+        headline: `${gainers.length} countries took new supply centers`,
+        happened: `${lines.join('; ')}.`,
+        matters: 'Each supply center supports one unit, so these gains become new armies and fleets in the winter. Holding 18 of 34 wins.',
+        powers: gainers,
+        focus: all[0],
+        highlight: all,
+        exact: [],
+      },
+      'gained-group',
+    );
+  }
   for (const p of POWERS) {
     const gained = after.state.board.centers[p].filter((c) => !before.state.board.centers[p].includes(c));
     const lost = before.state.board.centers[p].filter((c) => !after.state.board.centers[p].includes(c));
     const count = after.state.board.centers[p].length;
-    if (gained.length) {
+    if (gained.length && !groupGains) {
       const sources = gained.map((loc) => {
         const from = POWERS.find((q) => before.state.board.centers[q].includes(loc));
         return `${provinceName(loc)} (${from ? `held by ${NATIONS[from].name}` : 'neutral'} before this phase)`;
@@ -415,7 +468,8 @@ export function deriveGuidedPhase(match: Match, turnIndex: number): GuidedPhase 
   }
 
   // 4. Attacks that bounced. Two or fewer are shown one by one; more are grouped into one standoff popup.
-  const bounced = acts.filter((a) => a.r.kind === 'move' && a.r.target && a.tokens.includes('bounce'));
+  const toldFailed = new Set(keptFailed.map((k) => k.reading.unit));
+  const bounced = acts.filter((a) => a.r.kind === 'move' && a.r.target && a.tokens.includes('bounce') && !toldFailed.has(a.r.unit));
   const targets = [...new Set(bounced.map((a) => a.r.target!))];
   for (const a of bounced) used.add(a.r.unit);
   const standoffLine = (target: string) => {

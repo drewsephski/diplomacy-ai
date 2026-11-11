@@ -219,7 +219,25 @@ test('private talks never claim an agreement, and an offer is labelled as one', 
 });
 
 test('popups are capped, and the rest are listed as overflow instead of stacking', () => {
-  // Seven countries each gain one center: seven separate popups before the cap.
+  // Seven countries each lose one center: seven separate popups before the cap.
+  const before = board('S1901M', {}, {
+    ENGLAND: ['LON'],
+    FRANCE: ['PAR'],
+    GERMANY: ['BER'],
+    ITALY: ['ROM'],
+    AUSTRIA: ['VIE'],
+    RUSSIA: ['MOS'],
+    TURKEY: ['CON'],
+  });
+  const after = board('F1901M', {}, {});
+  const t = turn('S1901M', {});
+  const phase = deriveGuidedPhase(match([checkpoint(before), checkpoint(after)], [t]), 0)!;
+  assert.equal(phase.events.length, MAX_POPUPS);
+  assert.equal(phase.overflow.length, 7 - MAX_POPUPS);
+  assert.ok(phase.overflow.every((h) => h.includes('lost')));
+});
+
+test('when more than three countries gain centers, the gains are one event, not a stack', () => {
   const before = board('S1901M', {}, {});
   const after = board('F1901M', {}, {
     ENGLAND: ['LON'],
@@ -230,11 +248,11 @@ test('popups are capped, and the rest are listed as overflow instead of stacking
     RUSSIA: ['MOS'],
     TURKEY: ['CON'],
   });
-  const t = turn('S1901M', {});
-  const phase = deriveGuidedPhase(match([checkpoint(before), checkpoint(after)], [t]), 0)!;
-  assert.equal(phase.events.length, MAX_POPUPS);
-  assert.equal(phase.overflow.length, 7 - MAX_POPUPS);
-  assert.ok(phase.overflow.every((h) => h.includes('now holds') || h.includes('gained')));
+  const phase = deriveGuidedPhase(match([checkpoint(before), checkpoint(after)], [turn('S1901M', {})]), 0)!;
+  const gains = phase.events.filter((e) => e.kind === 'center-gained');
+  assert.equal(gains.length, 1);
+  assert.equal(gains[0].powers.length, 7);
+  assert.match(gains[0].happened, /France took Paris \(now 1 of 18\)/);
 });
 
 test('a phase reads only its own two checkpoints: changing later history leaves the walkthrough unchanged', () => {

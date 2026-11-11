@@ -257,7 +257,8 @@ export function deriveWalkthrough(match: Match, turn: number, opts: WalkthroughO
     if (lead) beats.push(talksBeat(turn, [lead], 'Private talks', `${turn}-talks-${lead.id}`, lead.commitments.length ? 'promise-vs-order' : undefined));
     const rest = conversations.slice(1);
     if (rest.length) beats.push(talksBeat(turn, rest, 'Elsewhere', `${turn}-talks-elsewhere`, lead?.commitments.length ? undefined : rest.some((c) => c.commitments.length) ? 'promise-vs-order' : undefined));
-    for (const q of asked)
+    // One question beat keeps the walk short; any second question stays in the Watch for panel and the summary.
+    for (const q of asked.slice(0, 1))
       beats.push({
         id: `${turn}-question-${q.id}`,
         kind: 'question',
@@ -302,7 +303,7 @@ export function deriveWalkthrough(match: Match, turn: number, opts: WalkthroughO
     kind: 'reveal',
     board: 'after',
     label: 'The reveal',
-    headline: quiet ? (shownEvents.length ? shownEvents[0].headline : 'Nothing was contested') : `${consequential.length} ${consequential.length === 1 ? 'thing' : 'things'} to look at`,
+    headline: quiet ? (shownEvents.length ? shownEvents[0].headline : 'Nothing was contested') : 'The orders are revealed',
     body:
       (shownOrders.length ? shownOrders.map(({ p, o }) => `${NATIONS[p].name}: ${lower(plainOrder(o))}.`).slice(0, 5).join(' ') + ' ' : '') +
       `${phase.orderCount} ${phase.orderCount === 1 ? 'order' : 'orders'} resolved at the same moment.`,
@@ -338,23 +339,7 @@ export function deriveWalkthrough(match: Match, turn: number, opts: WalkthroughO
         ...(concept ? { concept, concepts: [concept] } : {}),
       });
     }
-  // Answers with no matching event get their own beat right after the events.
-  for (const q of questions)
-    if (!quiet && q.answer && !placed.has(q.id))
-      beats.push({
-        id: `${turn}-answer-${q.id}`,
-        kind: 'question',
-        board: 'after',
-        label: 'The answer',
-        headline: q.text,
-        body: q.answer.text,
-        powers: q.powers,
-        focus: q.provinces[0],
-        highlight: q.provinces,
-        question: q,
-        exact: [],
-      });
-
+  // Answers with no matching event are given on the summary beat (The answers), not as extra beats.
   const whatIfs = whatIfsFor(match, turn);
   const changes = POWERS.map((p) => ({
     p,

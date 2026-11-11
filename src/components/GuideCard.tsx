@@ -550,6 +550,17 @@ function SummaryBody({
           </p>
         </section>
       )}
+      {whatIf && (
+        <aside className="what-if-cta" aria-label="Try a different decision">
+          <span>What if?</span>
+          <b>{whatIf.question}</b>
+          <p>{whatIf.change}</p>
+          <button type="button" className="button" onClick={() => onWhatIf(whatIf)}>
+            <GitBranch size={15} /> Explore this alternate timeline
+          </button>
+          <small>The original record stays as it is. You choose how the new timeline continues before anything plays.</small>
+        </aside>
+      )}
       {(beat.matters || open.length > 0) && (
         <section className="guide-section">
           <h4>Still uncertain</h4>
@@ -577,17 +588,6 @@ function SummaryBody({
             ))}
           </ul>
         </>
-      )}
-      {whatIf && (
-        <aside className="what-if-cta" aria-label="Try a different decision">
-          <span>What if?</span>
-          <b>{whatIf.question}</b>
-          <p>{whatIf.change}</p>
-          <button type="button" className="button" onClick={() => onWhatIf(whatIf)}>
-            <GitBranch size={15} /> Explore this alternate timeline
-          </button>
-          <small>The original record stays as it is. You choose how the new timeline continues before anything plays.</small>
-        </aside>
       )}
       <p className="guide-next">{nextText(action, match.mode, complete)}</p>
     </>
