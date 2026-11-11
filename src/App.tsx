@@ -277,7 +277,8 @@ export default function App() {
     setMatch(m);
     setIndex(m.turns.length);
     setTab(m.parent ? 'Alternate timeline' : 'Watch');
-    setParent(undefined);
+    if (m.parent) void api<Match>(`/matches/${m.parent.id}`).then(setParent);
+    else setParent(undefined);
     follow.current = true;
     dispatchGuide({ type: 'reset', resolved: m.turns.length });
     localStorage.setItem('seven-powers-match', m.id);
@@ -543,7 +544,18 @@ export default function App() {
       {modal === 'branch' && (
         <Branch match={match} index={index} selected={selected} configured={configured} onClose={() => setModal(null)} onCreated={created} />
       )}{' '}
-      {modal === 'dossier' && <Dossier match={match} index={index} power={selected} onClose={() => setModal(null)} />}
+      {modal === 'dossier' && (
+        <Dossier
+          match={match}
+          index={index}
+          power={selected}
+          onClose={() => setModal(null)}
+          onMoment={(step) => {
+            setModal(null);
+            openTurn(index - 1, step);
+          }}
+        />
+      )}
       {modal === 'library' && (
         <Modal title="Saved games" onClose={() => setModal(null)}>
           <div className="modal-body">

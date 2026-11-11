@@ -3,27 +3,34 @@ import { ArrowRight, BookOpen, Flag, Shield, Swords } from 'lucide-react';
 import { NATIONS, PROFILES, phaseName } from '../domain';
 import { POWERS, type Match, type Power } from '../types';
 import { Crest, DispatchCard, Empty, Modal } from './Shared';
+import { WhoIsThis } from './WhoIsThis';
+import { deriveGuidedPhase } from '../guided/events';
 export function Dossier({
   match,
   index,
   power,
   onClose,
+  onMoment,
 }: {
   match: Match;
   index: number;
   power: Power;
   onClose: () => void;
+  /** Opens the walkthrough of one moment in the last phase. */
+  onMoment?: (step: number) => void;
 }) {
   const [tab, setTab] = useState('Situation');
   const cp = match.checkpoints[index];
   const turn = match.turns[index - 1];
   const nation = NATIONS[power];
+  const lastPhase = index > 0 ? deriveGuidedPhase(match, index - 1) : undefined;
   const messages = match.turns
     .slice(0, index)
     .flatMap((t) => t.messages)
     .filter((m) => m.from === power || m.to.includes(power));
   return (
     <Modal title={nation.formal} onClose={onClose} wide>
+      <WhoIsThis match={match} power={power} phase={lastPhase} onOpenMoment={onMoment} />
       <div className="dossier-intro">
         <Crest power={power} />
         <div>

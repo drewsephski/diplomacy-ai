@@ -84,7 +84,7 @@ test('recorded history never shows future messages, and the phase guide says so'
   await expect(page.locator('.phase-guide.history')).toContainText('EARLIER IN THE RECORD');
   await page.getByRole('button', { name: 'Seek moment 0: before Spring 1901' }).click();
   await expect(page.getByText('Nothing has happened yet.')).toBeVisible();
-  await page.getByRole('button', { name: 'Messages' }).click();
+  await page.locator('.side-tabs').getByRole('button', { name: /^Messages/ }).click();
   await expect(page.getByText('No messages yet.')).toBeVisible();
   await expect(page.locator('.dispatch')).toHaveCount(0);
   await page.getByRole('button', { name: 'What happened' }).click();

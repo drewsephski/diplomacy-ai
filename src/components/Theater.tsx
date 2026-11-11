@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { ArrowRight, Library } from 'lucide-react';
 import { NATIONS, modelLabel, phaseName } from '../domain';
-import { deriveGuidedPhase, type GuidedPhase } from '../guided/events';
+import type { GuidedPhase } from '../guided/events';
 import { outcomeOf } from '../guided/outcome';
 import { POWERS, type Match, type Power } from '../types';
 import { EndScreen } from './EndScreen';
@@ -72,7 +72,6 @@ export function Theater(props: TheaterProps) {
   const leader = POWERS.reduce((a, b) => (cp.state.board.centers[b].length > cp.state.board.centers[a].length ? b : a));
   const outcome = outcomeOf(match);
   const finished = outcome.kind !== 'open' || cp.state.done || match.status === 'complete';
-  const lastPhase = useMemo(() => (index > 0 ? deriveGuidedPhase(match, index - 1) : undefined), [match, index]);
   const gameOver = atEdge && finished && match.mode !== 'sample' && match.turns.length > 0;
   const highlight = guide.open && guide.phase ? guide.phase.events[guide.step]?.highlight ?? [] : [];
   const sampleEnd = atEdge && match.mode === 'sample' && match.status === 'complete';
@@ -253,7 +252,6 @@ export function Theater(props: TheaterProps) {
           <div className="country-preview-title">
             <span>COUNTRY</span>
             <h2>{nation.formal}</h2>
-            <WhoIsThis match={match} power={selected} phase={lastPhase} onOpen={(step) => lastPhase && actions.open(lastPhase.turn, step)} />
           </div>
           <button className="button dossier-button" onClick={props.onDossier}>
             Country details
@@ -262,54 +260,6 @@ export function Theater(props: TheaterProps) {
         </div>
       </aside>
     </main>
-  );
-}
-
-/** A plain "Who is this?" summary: where the country started, what it aims for, and its recent moments. */
-function WhoIsThis({
-  match,
-  power,
-  phase,
-  onOpen,
-}: {
-  match: Match;
-  power: Power;
-  phase?: GuidedPhase;
-  onOpen: (step: number) => void;
-}) {
-  const start = match.checkpoints[0].state.board;
-  const now = match.checkpoints[match.checkpoints.length - 1].state.board;
-  const moments = phase?.events.map((e, i) => ({ e, i })).filter(({ e }) => e.powers.includes(power)) ?? [];
-  const instruction = match.checkpoints[0].configs[power]?.instructions;
-  return (
-    <details className="who-is">
-      <summary>Who is this?</summary>
-      <p>
-        <b>Objective:</b> {NATIONS[power].objective}
-      </p>
-      <p>
-        <b>At the start:</b> {start.centers[power].length} supply centers, {start.units[power].length} units.{' '}
-        <b>Now:</b> {now.centers[power].length} centers, {now.units[power].length} units.
-      </p>
-      {instruction && (
-        <p>
-          <b>Observer instruction for this country:</b> “{instruction}”
-        </p>
-      )}
-      {moments.length > 0 ? (
-        <ul className="who-is-moments" aria-label={`Recent moments for ${NATIONS[power].name}`}>
-          {moments.map(({ e, i }) => (
-            <li key={e.id}>
-              <button className="text-button" onClick={() => onOpen(i)}>
-                {e.headline}
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="muted">No separate moments for this country in the last phase.</p>
-      )}
-    </details>
   );
 }
 
