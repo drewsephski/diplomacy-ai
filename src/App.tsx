@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { ArrowRight, ChevronDown, CircleHelp, X } from 'lucide-react';
+import { ArrowRight, CircleHelp, X } from 'lucide-react';
 import { api, removeGame } from './api';
 import { MODE_HINT, MODE_LABEL, phaseKind, phaseName } from './domain';
 import { deriveGuidedPhase } from './guided/events';
@@ -17,6 +17,9 @@ import { SavedGames } from './components/SavedGames';
 import { Chronicle, Comparison, Diplomacy } from './components/Views';
 import { Empty } from './components/Shared';
 import { useWatch } from './watch/useWatch';
+
+/** Approved in-page mark: transparent PNG, so it sits directly on the navy page with no tile or halo. */
+const BRAND_MARK = '/brand/seven-powers-mark-256.png?v=2';
 
 type Tab = 'Watch' | 'Messages' | 'Timeline' | 'Compared with history' | 'Alternate timeline' | 'History';
 
@@ -362,7 +365,7 @@ export default function App() {
     return (
       <div className="loading-screen">
         <Brand />
-        <div className="loading-compass">✧</div>
+        <img className="loading-mark" src={BRAND_MARK} alt="" width={96} height={96} />
         <h1>{error ? 'The game could not load.' : 'Preparing the European board…'}</h1>
         <p>{error || 'Setting the board. Opening the saved games.'}</p>
         {error && (
@@ -423,17 +426,7 @@ export default function App() {
       </header>
       <div className="matchbar">
         <div className="match-identity">
-          <button
-            className="match-name"
-            onClick={() => {
-              void refreshList();
-              switchTab('History');
-            }}
-            title="Open History to switch games"
-          >
-            {match.name}
-            <ChevronDown size={13} />
-          </button>
+          <span className="match-name">{match.name}</span>
           <span className={`mode-label ${match.mode}`} title={MODE_HINT[match.mode]}>
             {MODE_LABEL[match.mode]}
           </span>
@@ -504,10 +497,6 @@ export default function App() {
           endBusy={busy}
           onSelect={setSelected}
           onLocate={(code) => setFocus((f) => ({ code, nonce: (f?.nonce ?? 0) + 1 }))}
-          onHistory={() => {
-            void refreshList();
-            switchTab('History');
-          }}
           onDossier={() => setModal('dossier')}
           onDiplomacy={() => setTab('Messages')}
           onLiveEdge={() => seek(match.turns.length)}
@@ -641,16 +630,8 @@ export default function App() {
 function Brand() {
   return (
     <div className="brand">
-      <svg viewBox="0 0 56 56" aria-hidden="true">
-        <path
-          d="M28 2L32 22L49 9L36 25L54 28L34 32L47 48L31 36L28 54L24 34L8 47L21 31L2 28L22 24L9 8L25 21Z"
-          fill="none"
-          stroke="currentColor"
-        />
-        <path d="M28 2L28 28L22 24ZM54 28L28 28L32 22ZM28 54L28 28L34 32ZM2 28L28 28L24 34Z" fill="currentColor" />
-      </svg>
+      <img className="brand-mark" src={`${BRAND_MARK}`} alt="" width={38} height={38} decoding="async" />
       <span>SEVEN POWERS</span>
     </div>
   );
 }
-

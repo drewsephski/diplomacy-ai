@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowRight, History } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { NATIONS, modelLabel, phaseName } from '../domain';
 import type { GuidedPhase } from '../guided/events';
 import { outcomeOf } from '../guided/outcome';
@@ -46,7 +46,6 @@ interface TheaterProps {
   endBusy: boolean;
   onSelect: (p: Power) => void;
   onLocate: (code: string) => void;
-  onHistory: () => void;
   onDossier: () => void;
   onDiplomacy: () => void;
   onLiveEdge: () => void;
@@ -198,10 +197,6 @@ export function Theater(props: TheaterProps) {
             </small>
           </span>
         </div>
-        <button className="text-button archive-button" onClick={props.onHistory}>
-          <History size={15} /> All saved games
-          <ArrowRight size={13} />
-        </button>
       </aside>
       <EuropeMap board={cp.state.board} selected={selected} onSelect={props.onSelect} turn={turn} focus={focus} highlight={highlight}>
         {cardProps && <GuideCard {...cardProps} phase={guide.phase!} />}

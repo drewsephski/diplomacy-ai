@@ -184,3 +184,10 @@
     grid-template-columns: 1fr;
   }
 }
+
+.saved-emblem {
+  display: block;
+  width: 44px;
+  height: 44px;
+  opacity: 0.92;
+}

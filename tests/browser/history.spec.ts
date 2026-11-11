@@ -149,7 +149,7 @@ test('switching to History stops the watch session: no further phase is requeste
   await page.goto('/');
   await historyTab(page).click();
   await page.getByRole('button', { name: 'Open Watched game' }).click();
-  await page.getByRole('button', { name: /^Resume game/ }).click();
+  await page.getByRole('button', { name: /^Play first phase \(free\)/ }).click();
   await expect(page.locator('.timeline-labels')).toContainText('Moment 2 of', { timeout: 20_000 });
 
   await historyTab(page).click();
@@ -216,9 +216,8 @@ test('a live start creates the game once and requests its first phase once, howe
   await page.getByRole('button', { name: 'Next', exact: true }).click();
   expect({ creates, runs }).toEqual({ creates: 0, runs: 0 });
 
-  const start = page.getByRole('button', { name: 'Start game', exact: true });
-  await start.dblclick();
-  await start.click({ force: true }).catch(() => undefined);
+  // Two rapid presses in one gesture: the second must not create or run anything.
+  await page.getByRole('button', { name: 'Start game', exact: true }).dblclick();
   await expect(page.locator('.timeline-labels')).toContainText('Moment 1 of 1');
   await page.waitForTimeout(2500);
   expect({ creates, runs }).toEqual({ creates: 1, runs: 1 });

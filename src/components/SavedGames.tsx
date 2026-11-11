@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import '../history.css';
-import { ArrowRight, GitBranch, History as HistoryIcon, Play, RotateCcw, Trash2 } from 'lucide-react';
+import { ArrowRight, GitBranch, Play, RotateCcw, Trash2 } from 'lucide-react';
 
 import { describeResult, modeName } from '../history';
 import type { MatchSummary } from '../types';
@@ -50,7 +50,7 @@ export function SavedGames({
 
       {mine.length === 0 ? (
         <div className="saved-empty">
-          <HistoryIcon size={22} aria-hidden="true" />
+          <img className="saved-emblem" src="/brand/seven-powers-mark-256.png?v=2" alt="" width={44} height={44} />
           <h2>No games yet</h2>
           <p>Start a game to watch it play out phase by phase. Its record will appear here, so you can return to it later.</p>
           <div className="saved-empty-actions">
