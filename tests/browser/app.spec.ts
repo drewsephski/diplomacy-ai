@@ -367,8 +367,9 @@ test('sandbox is labelled as free local policies: start game plays to the phase 
   await expect(page.locator('.timeline-labels')).toContainText('Moment 3 of 3', { timeout: 30_000 });
   await expect(page.locator('.end-screen')).toContainText('Stopped at the phase limit');
   await expect(page.getByRole('button', { name: 'Game over' })).toBeDisabled();
-  await page.getByRole('button', { name: 'Saved games', exact: false }).click();
-  await expect(page.getByRole('dialog').getByText(gameName, { exact: true })).toBeVisible();
+  await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: 'History', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'History', exact: true })).toBeVisible();
+  await expect(page.getByRole('listitem').filter({ hasText: gameName })).toBeVisible();
 });
 
 test('opening the app never starts a model run or changes the record', async ({ page, request }) => {
