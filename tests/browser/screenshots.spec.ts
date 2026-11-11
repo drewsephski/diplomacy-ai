@@ -48,7 +48,7 @@ test('capture setup, guided card, and history on desktop and mobile', async ({ p
     r.fulfill({
       json: [
         { id: 'z-ai/glm-5.3-flash', name: 'GLM 5.3 Flash', input: 0.00000004, output: 0.00000008, context: 200000 },
-        { id: 'anthropic/claude-haiku-5.5', name: 'Claude Haiku 5.5', input: 0.000001, output: 0.000005, context: 200000 },
+        { id: 'anthropic/claude-haiku-5.5', name: 'Claude Haiku 5.5', input: 0.0000001, output: 0.0000005, context: 200000 },
       ],
     }),
   );
@@ -85,7 +85,8 @@ test('capture setup, guided card, and history on desktop and mobile', async ({ p
   await page.waitForTimeout(300);
   await page.screenshot({ path: 'docs/mobile.png' });
   await page.locator('.new-simulation').click();
-  await page.getByRole('combobox', { name: 'Germany model' }).click().catch(() => undefined);
+  await page.getByText('Advanced: models, behaviour, and each country').click();
+  await page.getByRole('combobox', { name: 'Germany model' }).click();
   await page.waitForTimeout(300);
   await page.screenshot({ path: 'docs/setup-mobile.png' });
 });
@@ -98,4 +99,6 @@ test('capture a guided card on a recorded phase', async ({ page }) => {
   await page.getByRole('button', { name: /Watch a labelled sample with a guide/ }).click();
   await page.waitForTimeout(400);
   await page.screenshot({ path: 'docs/guided-desktop.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: 'docs/guided-mobile.png' });
 });

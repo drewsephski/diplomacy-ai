@@ -14,7 +14,7 @@ test('every icon and manifest link resolves to an image of the declared size', a
   for (const l of links) {
     const res = await page.request.get(l.href!);
     expect(res.status(), l.href!).toBe(200);
-    if (l.href!.endsWith('.png') && l.sizes && l.sizes !== 'any') {
+    if (new URL(l.href!, page.url()).pathname.endsWith('.png') && l.sizes && l.sizes !== 'any') {
       const [w] = l.sizes.split('x').map(Number);
       const dims = await page.evaluate(
         (src) =>
