@@ -93,10 +93,7 @@ export function PhaseGuide({
             Before {phaseName(phase)} · {kind}
           </strong>
         </div>
-        <p>
-          Only finished phases are shown here. Later messages and secret orders stay hidden until
-          you return to the latest phase.
-        </p>
+        <p>Its talks can be read here. Its orders stay sealed, as they were at the time.</p>
         <button className="text-button" onClick={onLiveEdge}>
           Jump to the latest phase
         </button>
@@ -114,23 +111,23 @@ export function PhaseGuide({
           </strong>
         </div>
         <ol className="phase-steps">
-          <Step n={1} title="Private talks" state={talkTotal ? 'pending' : 'skipped'}>
+          <Step n={1} title="The countries talk" state={talkTotal ? 'pending' : 'skipped'}>
             {talkTotal
               ? `${rounds} ${rounds === 1 ? 'round' : 'rounds'} among ${activePowers.length} active countries`
               : 'Retreats and adjustments skip talks'}
           </Step>
-          <Step n={2} title="Secret orders" state="pending">
-            Each country seals its orders in secret
+          <Step n={2} title="They seal orders" state="pending">
+            Each country writes its orders in secret
           </Step>
-          <Step n={3} title="Resolution" state="pending">
-            The rules engine resolves all orders at once
+          <Step n={3} title="All resolve at once" state="pending">
+            The rules engine resolves every order together
           </Step>
         </ol>
         <p className="phase-guide-note">
           {match.mode === 'live'
-            ? 'Nothing is played until you press Play. Every AI call is billed and counted in the status bar.'
+            ? 'You watch; the AI countries decide. Nothing is played until you press Play, and every AI call is billed.'
             : match.mode === 'sandbox'
-              ? 'Sandbox policies run locally, with no model calls.'
+              ? 'You watch; simple local policies decide, with no model calls. Nothing plays until you press Play.'
               : 'The recorded sample has no next phase.'}
         </p>
       </section>
@@ -152,22 +149,22 @@ export function PhaseGuide({
           {pauseRequested
             ? 'Pausing after the current model call'
             : running
-              ? 'Agents are working on this phase'
+              ? 'The countries are playing this phase · you are watching'
               : 'Paused mid-phase · press Resume game to continue'}
         </strong>
       </div>
       <ol className="phase-steps">
-        <Step n={1} title="Private talks" state={talkState}>
+        <Step n={1} title="The countries talk" state={talkState}>
           {talkTotal === 0
             ? 'Not used in this phase type'
             : talksDone
               ? `${pending.messages.length} messages exchanged`
               : `Round ${Math.min(pending.round + 1, rounds)} of ${rounds} · ${negotiated} of ${talkTotal} conversations`}
         </Step>
-        <Step n={2} title="Secret orders" state={sealState}>
+        <Step n={2} title="They seal orders" state={sealState}>
           {`${sealed} of ${activePowers.length} sealed · contents stay secret until the phase resolves`}
         </Step>
-        <Step n={3} title="Resolution" state={resolveState}>
+        <Step n={3} title="All resolve at once" state={resolveState}>
           {allSealed ? 'All orders are being resolved together' : 'Waits for every country to seal its orders'}
         </Step>
       </ol>

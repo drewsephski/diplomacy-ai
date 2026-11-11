@@ -1,48 +1,22 @@
 import { ExternalLink, Scale } from 'lucide-react';
-import { NATIONS } from '../domain';
+import { NATIONS, phaseName } from '../domain';
+import { clampMoment, momentLabel, mutualTrustAt } from '../moment';
+import { contexts } from '../history-notes';
 import { POWERS, type Checkpoint, type Match, type Power } from '../types';
-const contexts = [
-  {
-    title: 'Alliances were choices, not a script.',
-    date: '1901–1907',
-    body: 'Britain’s agreements with Japan, France, and Russia developed through separate negotiations. A Franco-British understanding in this simulation is a strategic choice, not evidence that an Entente must emerge.',
-    source: 'UK Government · Lord Lansdowne',
-    url: 'https://www.gov.uk/government/history/past-foreign-secretaries/henry-petty-fitzmaurice',
-  },
-  {
-    title: 'An alliance did not guarantee entry into war.',
-    date: '1914–1915',
-    body: 'Italy belonged to the Triple Alliance but stayed neutral in 1914 and entered the war against Austria-Hungary in 1915. A coalition’s membership is less informative than the actions its members take.',
-    source: 'National WWI Museum · Italy enters the war',
-    url: 'https://www.theworldwar.org/learn/about-wwi/italy-enters-world-war-i',
-  },
-  {
-    title: 'The Ottoman alignment was not inevitable.',
-    date: '1914',
-    body: 'The Ottoman Empire was not part of the Central Powers at the beginning of August 1914. Its later entry illustrates why this observatory leaves future alignments open rather than encoding the eventual wartime blocs.',
-    source: 'Canadian War Museum · Origins and early phases',
-    url: 'https://www.warmuseum.ca/firstworldwar/history/going-to-war/origins-and-early-phases/',
-  },
-];
+
+/**
+ * Real history (sourced, fixed) beside the simulated timeline at the viewed moment `index`. Every
+ * simulated reading uses checkpoint `index` and turns before it only. Trust readings are what both
+ * countries reported, an assessment, never proof of an alliance.
+ */
 export function HistoricalComparison({ match, index }: { match: Match; index: number }) {
-  const cp = match.checkpoints[index];
-  const pairs: { a: Power; b: Power; score: number }[] = [];
-  for (let a = 0; a < POWERS.length; a++)
-    for (let b = a + 1; b < POWERS.length; b++) {
-      const pa = POWERS[a],
-        pb = POWERS[b];
-      pairs.push({
-        a: pa,
-        b: pb,
-        score: Math.min(cp.relations[pa][pb] || 0, cp.relations[pb][pa] || 0),
-      });
-    }
-  const friendly = pairs.filter((p) => p.score >= 30);
+  const at = momentLabel(match, index);
+  const friendly = mutualTrustAt(match, at.index, 30);
   const broken = match.turns
-    .slice(0, index)
+    .slice(0, at.index)
     .flatMap((t) => t.promises)
     .filter((p) => !p.kept);
-  const conflicts = match.turns.slice(0, index).flatMap((turn, i) =>
+  const conflicts = match.turns.slice(0, at.index).flatMap((turn, i) =>
     POWERS.flatMap((attacker) =>
       turn.decisions[attacker].orders.flatMap((order) => {
         const parts = order.split(' ');
@@ -71,20 +45,22 @@ export function HistoricalComparison({ match, index }: { match: Match; index: nu
       </div>
       <div className="history-columns">
         <div>
-          <h3>In this timeline</h3>
+          <h3>
+            In this simulated timeline <small className="history-when">as of {at.season} · moment {at.index}</small>
+          </h3>
           <div className="observation">
-            <span>RECIPROCAL TRUST</span>
+            <span>STATED TRUST</span>
             <h2>
               {friendly.length
-                ? `${friendly.length} emerging ${friendly.length === 1 ? 'partnership' : 'partnerships'}`
-                : 'No settled coalition'}
+                ? `${friendly.length} ${friendly.length === 1 ? 'pair reports' : 'pairs report'} trust in each other`
+                : 'No pair reports strong trust in each other'}
             </h2>
             <p>
               {friendly.length
-                ? friendly.map((p) => `${NATIONS[p.a].name} + ${NATIONS[p.b].name}`).join('; ')
-                : 'No pair currently reports mutual trust of +30 or higher. Diplomatic overtures alone are not a durable alliance.'}
+                ? `${friendly.map((p) => `${NATIONS[p.a].name} and ${NATIONS[p.b].name}`).join('; ')}: each rates the other at +30 or higher. That is what both countries say they believe, not a signed alliance; their orders are the test.`
+                : 'No two countries both rate each other at +30 or higher. Friendly messages alone are not an alliance.'}
             </p>
-            <small>Based on both countries’ reported trust at this moment.</small>
+            <small>Each country’s own assessment at this moment, as it reported it.</small>
           </div>
           <div className="observation">
             <span>COMMITMENTS TESTED</span>
@@ -93,7 +69,7 @@ export function HistoricalComparison({ match, index }: { match: Match; index: nu
             </h2>
             <p>
               {broken.length
-                ? `${[...new Set(broken.map((p) => NATIONS[p.from].name))].join(', ')} issued orders that contradicted explicit commitments. Compare the negotiation with the reveal to understand the cost.`
+                ? `${[...new Set(broken.map((p) => NATIONS[p.from].name))].join(', ')} issued orders that contradicted explicit commitments. The record shows what was promised and ordered; it does not show why.`
                 : 'No explicit order promise has been contradicted at this moment. Silence and vague assurances are not counted as promises.'}
             </p>
           </div>
@@ -115,10 +91,12 @@ export function HistoricalComparison({ match, index }: { match: Match; index: nu
           <CenterChart match={match} index={index} />
         </div>
         <div>
-          <h3>In the historical record</h3>
+          <h3>
+            Real history <small className="history-when">sourced, and not part of the simulation</small>
+          </h3>
           {contexts.map((c) => (
             <article className="history-context" key={c.title}>
-              <span>{c.date}</span>
+              <span>Real history · {c.date}</span>
               <h2>{c.title}</h2>
               <p>{c.body}</p>
               <a href={c.url} target="_blank" rel="noreferrer">
@@ -147,7 +125,7 @@ export function HistoricalComparison({ match, index }: { match: Match; index: nu
   );
 }
 export function CenterChart({ match, index }: { match: Match; index: number }) {
-  const cps = match.checkpoints.slice(0, index + 1);
+  const cps = match.checkpoints.slice(0, clampMoment(match, index) + 1);
   const max = Math.max(
     8,
     ...cps.flatMap((c) => POWERS.map((p) => c.state.board.centers[p].length)),
@@ -193,7 +171,7 @@ export function CenterChart({ match, index }: { match: Match; index: number }) {
           </polyline>
         ))}
         <text x="24" y="166" fill="#9b9e9d" fontSize="10">
-          1901
+          {phaseName(match.checkpoints[0].state.board.name)}
         </text>
         <text x="410" y="166" fill="#9b9e9d" fontSize="10" textAnchor="end">
           Moment {index}

@@ -15,7 +15,7 @@ cp .env.example .env
 pnpm dev
 ```
 
-Open **http://127.0.0.1:5173**. On first startup, the server creates a nine-phase sample replay using the real adjudicator. No API key is required to explore it or run a sandbox.
+Open **http://127.0.0.1:5173**. On first startup, the server creates an eleven-phase sample replay using the real adjudicator. No API key is required to explore it or run a sandbox.
 
 For real agents, put your **OpenRouter** key in `.env`:
 

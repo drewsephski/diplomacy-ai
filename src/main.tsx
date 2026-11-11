@@ -9,6 +9,7 @@ import './styles.css';
 import './ui.css';
 import './guide.css';
 import './flow.css';
+import './stage.css';
 import App from './App';
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

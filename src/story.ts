@@ -86,6 +86,13 @@ export const PROVINCES: Record<string, string> = {
   YOR: 'Yorkshire',
 };
 
+/** The 34 supply centers of the standard map (base codes). */
+export const SUPPLY_CENTERS = [
+  'ANK', 'BEL', 'BER', 'BRE', 'BUD', 'BUL', 'CON', 'DEN', 'EDI', 'GRE', 'HOL', 'KIE',
+  'LON', 'LVP', 'MAR', 'MOS', 'MUN', 'NAP', 'NWY', 'PAR', 'POR', 'ROM', 'RUM', 'SER',
+  'SEV', 'SMY', 'SPA', 'STP', 'SWE', 'TRI', 'TUN', 'VEN', 'VIE', 'WAR',
+] as const;
+
 const COASTS: Record<string, string> = {
   NC: 'north coast',
   SC: 'south coast',
@@ -185,6 +192,56 @@ export function describeOrder(order: string): OrderReading {
     };
   }
   return { ...base, kind: 'unknown', summary: exact };
+}
+
+const SEA_NAME = /\b(Sea|Ocean|Channel|Gulf|Bight|Skagerrak|Mediterranean)\b/;
+
+/** A province in a sentence: "Brest", "the English Channel". */
+export function placePhrase(code: string) {
+  const name = provinceName(code);
+  return SEA_NAME.test(name) ? `the ${name}` : name;
+}
+
+/** "the fleet in Brest", "the army in the Ruhr"-style phrase for a unit. */
+function unitIn(unit: string) {
+  const [type, loc = ''] = unit.replace('*', '').split(' ');
+  return `the ${type === 'F' ? 'fleet' : type === 'A' ? 'army' : 'unit'} in ${placePhrase(loc)}`;
+}
+
+/**
+ * One order as a plain sentence, without notation: "The fleet in Brest moves to the Mid-Atlantic
+ * Ocean", "The army in Holland supports the fleet in the English Channel into Belgium". The exact
+ * engine text stays available separately; this is the reading shown first.
+ */
+export function plainOrder(order: string): string {
+  if (order === 'No order issued') return 'No order was issued for that unit';
+  const r = describeOrder(order);
+  const t = order.trim().split(/\s+/);
+  const self = unitIn(r.unit);
+  const cap = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
+  switch (r.kind) {
+    case 'hold':
+      return cap(`${self} holds`);
+    case 'move':
+      return cap(`${self} moves to ${placePhrase(t[3] ?? r.target ?? '')}${order.trim().endsWith(' VIA') ? ' by convoy' : ''}`);
+    case 'retreat':
+      return cap(`${self} retreats to ${placePhrase(t[3] ?? r.target ?? '')}`);
+    case 'support': {
+      const supported = unitIn(`${t[3] ?? ''} ${t[4] ?? ''}`);
+      const dash = t.indexOf('-', 4);
+      return dash > 0 && t[dash + 1]
+        ? cap(`${self} supports ${supported} into ${placePhrase(t[dash + 1])}`)
+        : cap(`${self} supports ${supported} to hold`);
+    }
+    case 'convoy':
+      return r.target ? cap(`${self} carries ${unitIn(`${t[3]} ${t[4]}`)} to ${placePhrase(r.target)}`) : cap(`${self} convoys ${unitIn(`${t[3]} ${t[4]}`)}`);
+    case 'build':
+      return `Build ${r.unit.startsWith('F') ? 'a fleet' : 'an army'} in ${placePhrase(t[1] ?? r.origin)}`;
+    case 'disband':
+      return cap(`${self} disbands`);
+    default:
+      return r.summary;
+  }
 }
 
 /** Engine result tokens for a unit, rendered as plain outcomes. Empty means it succeeded. */

@@ -1,6 +1,6 @@
 import data from '../map-data.json';
 import { NATIONS, phaseKind, phaseName } from '../domain';
-import { baseProvince, describeOrder, provinceName, type OrderReading } from '../story';
+import { baseProvince, describeOrder, plainOrder, provinceName, type OrderReading } from '../story';
 import { POWERS, type Board, type Match, type Power } from '../types';
 
 /**
@@ -180,7 +180,14 @@ function orderPhrase(order: string): string {
     return `send its ${unitNoun(reading.unit)}${direction ? ` ${direction}` : ''} from ${placeIn(reading.origin)} into ${placeIn(reading.target)}`;
   }
   if (reading.kind === 'hold') return `hold its ${unitNoun(reading.unit)} in ${placeIn(reading.origin)}`;
-  return reading.summary.charAt(0).toLowerCase() + reading.summary.slice(1);
+  if (reading.kind === 'support') {
+    // "support the fleet in the English Channel into Belgium with its army in Holland"
+    const plain = plainOrder(order);
+    const supporting = plain.replace(/^The (army|fleet|unit) in .+? supports /, '');
+    return `support ${supporting} with its ${unitNoun(reading.unit)} in ${placeIn(reading.origin)}`;
+  }
+  const plain = plainOrder(order);
+  return plain.charAt(0).toLowerCase() + plain.slice(1);
 }
 
 function supportParts(order: string) {

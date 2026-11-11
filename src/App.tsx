@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { ArrowRight, CircleHelp, X } from 'lucide-react';
+import { ArrowRight, CircleHelp, Menu, X } from 'lucide-react';
 import { api, removeGame } from './api';
 import { MODE_HINT, MODE_LABEL, phaseKind, phaseName } from './domain';
-import { deriveGuidedPhase } from './guided/events';
+import { historyNoteFor } from './history-notes';
+import { deriveWalkthrough, type WhatIf } from './guided/beats';
+import type { ConceptId } from './guided/concepts';
 import { guideReducer, initialGuide, pendingPhases } from './guided/reducer';
-import { INTRO_KEY, readFlag, readGuided, writeFlag, writeGuided } from './guided/prefs';
+import { INTRO_KEY, readFlag, readFollow, readGuided, readSeenConcepts, writeFlag, writeFollow, writeGuided, writeSeenConcepts } from './guided/prefs';
 import { type Match, type MatchSummary, type Power } from './types';
 import { Dossier } from './components/Dossier';
 import { Setup } from './components/Setup';
@@ -14,24 +16,37 @@ import { Playback } from './components/Playback';
 import { Help } from './components/Help';
 import { HistoricalComparison } from './components/HistoricalComparison';
 import { SavedGames } from './components/SavedGames';
-import { Chronicle, Comparison, Diplomacy } from './components/Views';
+import { MenuSheet } from './components/MenuSheet';
+import { ConversationsPage } from './components/Conversations';
+import { Chronicle, Comparison } from './components/Views';
 import { Empty } from './components/Shared';
 import { useWatch, type RunOutcome, type StopReason } from './watch/useWatch';
 
 /** Approved in-page mark: transparent PNG, so it sits directly on the navy page with no tile or halo. */
 const BRAND_MARK = '/brand/seven-powers-mark-256.png?v=2';
 
-type Tab = 'Watch' | 'Messages' | 'Timeline' | 'Compared with history' | 'Alternate timeline' | 'History';
+type Tab = 'Watch' | 'Conversations' | 'Timeline' | 'Compared with history' | 'Alternate timeline' | 'History';
+
+
+/** The sample offered to newcomers: the newest authored version, else any sample record. */
+function newestSample(list: MatchSummary[]) {
+  const samples = list.filter((m) => m.mode === 'sample');
+  return samples.reduce<MatchSummary | undefined>((best, m) => (!best || (m.sampleVersion ?? 0) > (best.sampleVersion ?? 0) ? m : best), undefined);
+}
 
 export default function App() {
   const [match, setMatch] = useState<Match>();
   const [matches, setMatches] = useState<MatchSummary[]>([]);
   const [index, setIndex] = useState(0);
-  const [selected, setSelected] = useState<Power>('FRANCE');
+  /** The followed country: orders threads, events, and map emphasis. Remembered in this browser. */
+  const [follow, setFollowState] = useState<Power>(readFollow);
   const [focus, setFocus] = useState<{ code: string; nonce: number }>();
   const [tab, setTab] = useState<Tab>('Watch');
   const [modal, setModal] = useState<'setup' | 'branch' | 'dossier' | 'help' | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [setupMode, setSetupMode] = useState<'live' | 'sandbox'>();
+  const [branchPreset, setBranchPreset] = useState<WhatIf>();
+  const [initialThread, setInitialThread] = useState<string>();
   const [configured, setConfigured] = useState(false);
   const [parent, setParent] = useState<Match>();
   const [expertPlaying, setExpertPlaying] = useState(false);
@@ -39,10 +54,12 @@ export default function App() {
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [busy, setBusy] = useState(false);
-  const [introHidden, setIntroHidden] = useState(() => readFlag(INTRO_KEY));
+  const [welcomeHidden, setWelcomeHidden] = useState(() => readFlag(INTRO_KEY));
   const [guided, setGuided] = useState(readGuided);
+  const [seenConcepts, setSeenConcepts] = useState(readSeenConcepts);
   const [guide, dispatchGuide] = useReducer(guideReducer, undefined, () => initialGuide(0));
-  const follow = useRef(true);
+  /** Keep the view on the latest moment as new phases arrive. */
+  const followEdge = useRef(true);
   /** The match on screen. Every async result for another match is dropped. */
   const currentId = useRef('');
   /** Increments on every navigation between matches; an async result from an older navigation is dropped. */
@@ -50,6 +67,8 @@ export default function App() {
   const opener = useRef<HTMLElement | null>(null);
   /** The match whose first phase Setup is requesting right now, if any. */
   const starting = useRef<string | undefined>(undefined);
+  /** Phases whose talks the viewer watched arrive live on the Watch stage (match id : turn). */
+  const sawTalks = useRef(new Set<string>());
 
   const reading = guide.turn !== undefined;
   const watch = useWatch({
@@ -59,10 +78,15 @@ export default function App() {
     onMatch: (m) => {
       if (currentId.current !== m.id) return;
       setMatch(m);
-      if (follow.current) setIndex(m.turns.length);
+      if (followEdge.current) setIndex(m.turns.length);
       if (m.status !== 'running') void refreshList();
     },
   });
+
+  function setFollow(p: Power) {
+    setFollowState(p);
+    writeFollow(p);
+  }
 
   /** The original of an alternate timeline. If it was deleted, the child still plays; only the comparison is unavailable. */
   const loadParent = useCallback(async (m: Match) => {
@@ -100,7 +124,7 @@ export default function App() {
     currentId.current = m.id;
     setMatch(m);
     setIndex(at ?? (m.mode === 'sample' ? Math.min(1, m.turns.length) : m.turns.length));
-    follow.current = at === undefined || at === m.turns.length;
+    followEdge.current = at === undefined || at === m.turns.length;
     dispatchGuide({ type: 'reset', resolved: m.turns.length });
     setParent(undefined);
     void loadParent(m).then((p) => {
@@ -143,7 +167,7 @@ export default function App() {
         if (cancelled) return;
         setConfigured(health.liveConfigured);
         const saved = localStorage.getItem('seven-powers-match');
-        const initial = list.find((m) => m.id === saved) || list.find((m) => m.mode === 'sample') || list[0];
+        const initial = list.find((m) => m.id === saved) || newestSample(list) || list[0];
         if (initial) await loadRef.current(initial.id);
       } catch (e) {
         if (!cancelled) setError((e as Error).message);
@@ -178,10 +202,21 @@ export default function App() {
     if (modal !== null) dispatchGuide({ type: 'close' });
   }, [modal]);
 
-  const guidePhase = useMemo(
-    () => (guide.turn !== undefined && match ? deriveGuidedPhase(match, guide.turn) : undefined),
-    [match, guide.turn],
+  const walkthrough = useMemo(
+    () => (guide.turn !== undefined && match ? deriveWalkthrough(match, guide.turn, { follow, brief: guide.brief }) : undefined),
+    [match, guide.turn, guide.brief, follow],
   );
+  const beat = walkthrough ? walkthrough.beats[Math.min(guide.step, walkthrough.beats.length - 1)] : undefined;
+  /**
+   * The moment on screen. While the guide is open the board follows its beat: before the reveal it
+   * is the start of the walked phase (checkpoint `turn`); from the reveal on, the board after it.
+   */
+  const shown = walkthrough && beat ? (beat.board === 'before' ? walkthrough.turn : walkthrough.turn + 1) : index;
+
+  // Remember which phases' talks the viewer saw arrive live, so that phase's walkthrough can skip them.
+  useEffect(() => {
+    if (match && tab === 'Watch' && index === match.turns.length && match.pending?.messages.length) sawTalks.current.add(`${match.id}:${match.turns.length}`);
+  }, [match, tab, index]);
 
   function restoreFocus() {
     const el = opener.current;
@@ -189,26 +224,26 @@ export default function App() {
     if (el?.isConnected) requestAnimationFrame(() => el.focus({ preventScroll: true }));
   }
 
-  /** Opens the walkthrough of one resolved phase and shows the board after it. */
-  function openTurn(turn: number, step = 0) {
+  /** Opens the walkthrough of one resolved phase. The board then follows its beats. */
+  function openTurn(turn: number, step = 0, brief = false) {
     if (!match || turn < 0 || turn >= match.turns.length) return;
     if (document.activeElement instanceof HTMLElement && !document.activeElement.closest('.guide-card')) opener.current = document.activeElement;
     setExpertPlaying(false);
-    follow.current = turn + 1 === match.turns.length;
+    followEdge.current = turn + 1 === match.turns.length;
     setIndex(turn + 1);
-    dispatchGuide({ type: 'open', turn, step });
+    dispatchGuide({ type: 'open', turn, step, brief });
   }
 
   // A phase that resolved during an explicit session opens its walkthrough by itself (guided view).
   // A watch session holds the next phase until the viewer presses Continue watching.
   useEffect(() => {
     if (!guided || !match || tab !== 'Watch' || modal) return;
-    if (watch.holdTurn !== undefined && guide.turn !== watch.holdTurn) openTurn(watch.holdTurn, 0);
+    if (watch.holdTurn !== undefined && guide.turn !== watch.holdTurn) openTurn(watch.holdTurn, 0, sawTalks.current.has(`${match.id}:${watch.holdTurn}`));
   }, [watch.holdTurn, guided, match?.id, tab, modal]);
   useEffect(() => {
     const a = watch.arrival;
     if (!a || a.kind !== 'once' || !guided || !match || a.matchId !== match.id || tab !== 'Watch' || modal) return;
-    openTurn(a.turn, 0);
+    openTurn(a.turn, 0, sawTalks.current.has(`${match.id}:${a.turn}`));
   }, [watch.arrival?.seq]);
 
   /** Starts (or resumes) watching from the latest phase. An explicit viewer press only. */
@@ -217,7 +252,7 @@ export default function App() {
     setError('');
     setInfo('');
     setExpertPlaying(false);
-    follow.current = true;
+    followEdge.current = true;
     setIndex(match.turns.length);
     if (reading) dispatchGuide({ type: 'close', finished: guide.turn === match.turns.length - 1 });
     return watch.begin(match.id, { cleared: match.turns.length, immediate: true, report: opts.report });
@@ -228,7 +263,7 @@ export default function App() {
     if (!match) return;
     setError('');
     setInfo('');
-    follow.current = true;
+    followEdge.current = true;
     setIndex(match.turns.length);
     dispatchGuide({ type: 'close' });
     void watch.begin(match.id, { kind: 'once', cleared: match.turns.length });
@@ -240,26 +275,33 @@ export default function App() {
       openTurn(turn ?? (index > 0 ? index - 1 : 0), step ?? 0);
     },
     step: (to) => {
-      if (!guidePhase) return;
-      dispatchGuide({ type: 'step', to, count: guidePhase.events.length });
+      if (!walkthrough) return;
+      dispatchGuide({ type: 'step', to, count: walkthrough.beats.length - 1 });
     },
-    // Closing is never permission to keep playing: during a watch it pauses the game.
+    // Closing is never permission to keep playing: during a watch it pauses the game. Closed before
+    // the reveal of a recorded phase, the view stays at the start of that phase, so closing reveals
+    // nothing. The latest phase of the viewer's own unfinished game returns to the live edge, where
+    // Resume game is.
     close: (finished = false) => {
       if (watch.phase !== 'idle') holdWatch('guide');
+      const latestOwn = Boolean(match && walkthrough && match.mode !== 'sample' && walkthrough.turn === match.turns.length - 1 && !finishedGame);
+      const stayBefore = Boolean(walkthrough && beat?.board === 'before' && !finished && !latestOwn);
+      const at = stayBefore ? walkthrough!.turn : index;
+      if (stayBefore) setIndex(at);
       dispatchGuide({ type: 'close', finished });
-      follow.current = match ? index === match.turns.length : true;
+      followEdge.current = match ? at === match.turns.length : true;
       restoreFocus();
     },
     continueNext: () => {
-      if (!match || !guidePhase) return;
-      const next = guidePhase.turn + 1;
+      if (!match || !walkthrough) return;
+      const next = walkthrough.turn + 1;
       if (next >= match.turns.length) return;
       dispatchGuide({ type: 'close', finished: true });
       openTurn(next, 0);
     },
     continueWatching: () => {
       dispatchGuide({ type: 'close', finished: true });
-      follow.current = true;
+      followEdge.current = true;
       watch.continueWatching();
       restoreFocus();
     },
@@ -283,7 +325,7 @@ export default function App() {
     holdWatch('seek');
     dispatchGuide({ type: 'close' });
     setIndex(i);
-    follow.current = match ? i === match.turns.length : true;
+    followEdge.current = match ? i === match.turns.length : true;
   }
 
   const finishedGame = match ? match.status === 'complete' || match.checkpoints.at(-1)!.state.done : false;
@@ -309,7 +351,7 @@ export default function App() {
     }
     if (match.turns.length === 0) return;
     if (guided) {
-      openTurn(index >= match.turns.length ? 0 : Math.max(0, index - 1), 0);
+      openTurn(index >= match.turns.length ? 0 : index, 0);
       return;
     }
     if (expertPlaying) {
@@ -364,7 +406,7 @@ export default function App() {
       if (nav.current !== n || currentId.current !== id) return;
       setMatch(next);
       setIndex(next.turns.length);
-      follow.current = true;
+      followEdge.current = true;
     } catch (e) {
       if (nav.current === n) setError((e as Error).message);
     } finally {
@@ -374,13 +416,28 @@ export default function App() {
 
   /** Any view other than the board ends automatic play; coming back needs an explicit Resume. */
   function switchTab(next: Tab) {
+    setMenuOpen(false);
     if (next !== 'Watch') holdWatch('navigate');
+    if (next === 'Conversations' && reading) {
+      // Leaving the board closes the walkthrough at the moment it was showing.
+      setIndex(shown);
+      dispatchGuide({ type: 'close' });
+    }
     setTab(next);
   }
 
   function openModal(next: 'setup' | 'branch' | 'dossier' | 'help') {
+    setMenuOpen(false);
     holdWatch('dialog');
+    // A dialog reads the moment on screen; closing the walkthrough keeps that moment.
+    if (reading) setIndex(shown);
     setModal(next);
+  }
+
+  /** Opens the branch dialog prefilled with one supported "What if?" from the walkthrough. */
+  function openWhatIf(w: WhatIf) {
+    setBranchPreset(w);
+    openModal('branch');
   }
 
   /** Loads a saved game. Opening never starts it: only the Resume control in Watch sends a request. */
@@ -403,7 +460,7 @@ export default function App() {
         } catch {
           /* ignore */
         }
-        const next = list.find((m) => m.mode === 'sample') || list[0];
+        const next = newestSample(list) || list[0];
         if (next) await load(next.id);
         else setMatch(undefined);
       }
@@ -414,13 +471,6 @@ export default function App() {
     }
   }
 
-  async function openSample() {
-    const list = matches.length ? matches : await refreshList();
-    const sample = list.find((m) => m.mode === 'sample');
-    if (!sample) return;
-    const shown = await openGame(sample.id, guided ? 0 : 1);
-    if (shown && guided) setPendingGuide({ id: sample.id });
-  }
   // Opens the sample walkthrough once its record is on screen (after the load above settled).
   const [pendingGuide, setPendingGuide] = useState<{ id: string }>();
   useEffect(() => {
@@ -429,9 +479,57 @@ export default function App() {
     openTurn(0, 0);
   }, [pendingGuide, match?.id]);
 
+  /** History's "Open the recorded sample": with Guided view on, its first phase opens with a guide. */
+  async function openSample() {
+    const list = matches.length ? matches : await refreshList();
+    const sample = newestSample(list);
+    if (!sample) return;
+    const shownOk = await openGame(sample.id, guided ? 0 : 1);
+    if (shownOk && guided) setPendingGuide({ id: sample.id });
+  }
+
+  /** The welcome's one way in: the newest sample at moment 0, following France, first beat of Spring 1901. */
+  async function watchFirstNegotiation() {
+    dismissWelcome();
+    setFollow('FRANCE');
+    const list = matches.length ? matches : await refreshList();
+    const sample = newestSample(list);
+    if (!sample) return;
+    const shownOk = await openGame(sample.id, 0);
+    if (shownOk) setPendingGuide({ id: sample.id });
+  }
+
+  function dismissWelcome() {
+    setWelcomeHidden(true);
+    writeFlag(INTRO_KEY, true);
+  }
+
   function openSetup(mode?: 'live' | 'sandbox') {
     setSetupMode(mode);
     openModal('setup');
+  }
+
+  function toggleGuided() {
+    const next = !guided;
+    holdWatch('guide');
+    setGuided(next);
+    writeGuided(next);
+    if (reading) setIndex(shown);
+    dispatchGuide({ type: 'close' });
+  }
+
+  function conceptSeen(id: ConceptId) {
+    setSeenConcepts((s) => {
+      const next = new Set(s);
+      next.add(id);
+      writeSeenConcepts(next);
+      return next;
+    });
+  }
+
+  function locateOnBoard(code: string) {
+    if (tab !== 'Watch') setTab('Watch');
+    setFocus((f) => ({ code, nonce: (f?.nonce ?? 0) + 1 }));
   }
 
   /** Every way of closing a dialog (button, Escape, backdrop) ends here. Closing Setup cancels a start in progress. */
@@ -442,6 +540,7 @@ export default function App() {
       setInfo('Start cancelled. The game is saved and paused. Press Play first phase or Resume game when you are ready.');
     }
     setModal(null);
+    setBranchPreset(undefined);
   }
 
   if (!match)
@@ -459,8 +558,9 @@ export default function App() {
       </div>
     );
 
-  const cp = match.checkpoints[Math.min(index, match.checkpoints.length - 1)];
-  const atEdge = index === match.turns.length;
+  const view = tab === 'Watch' ? shown : index;
+  const cp = match.checkpoints[Math.min(view, match.checkpoints.length - 1)];
+  const atEdge = view === match.turns.length;
   const running = match.status === 'running';
   const complete = match.status === 'complete' || cp.state.done;
   const noticeText = watch.notice?.text;
@@ -497,73 +597,78 @@ export default function App() {
   const lastTurn = match.turns.length - 1;
   const guideFinal = complete || match.turns.length >= match.limits.maxPhases;
   let summaryAction: SummaryAction = { kind: 'done' };
-  if (guidePhase) {
-    if (watch.phase === 'reading' && watch.holdTurn === guidePhase.turn)
+  if (walkthrough) {
+    if (watch.phase === 'reading' && watch.holdTurn === walkthrough.turn)
       summaryAction = guideFinal ? { kind: 'finish' } : { kind: 'continue-watching', calls: 7 * (match.limits.diplomacyRounds + 1) };
-    else if (guidePhase.turn < lastTurn)
-      summaryAction = { kind: 'next-recorded', label: phaseName(match.turns[guidePhase.turn + 1].phase) };
+    else if (walkthrough.turn < lastTurn) summaryAction = { kind: 'next-recorded', label: phaseName(match.turns[walkthrough.turn + 1].phase) };
     else if (match.mode !== 'sample' && !guideFinal && watch.phase === 'idle' && !running) summaryAction = { kind: 'resume' };
   }
 
+  const tabs: { id: Tab; label: string; secondary?: boolean }[] = [
+    { id: 'Watch', label: 'Watch' },
+    { id: 'Conversations', label: 'Conversations' },
+    { id: 'Timeline', label: 'Timeline' },
+    { id: 'History', label: 'History' },
+    { id: 'Compared with history', label: 'Compared with history', secondary: true },
+    ...(match.parent ? [{ id: 'Alternate timeline' as Tab, label: 'Alternate timeline', secondary: true }] : []),
+  ];
+
   return (
-    <div className="app-shell">
-      <header className="topbar">
-        <Brand />
-        <nav aria-label="Main navigation">
-          {(['Watch', 'Messages', 'Timeline', 'Compared with history', ...(match.parent ? ['Alternate timeline'] : []), 'History'] as Tab[]).map((t) => (
-            <button key={t} onClick={() => switchTab(t)} className={tab === t ? 'active' : ''} aria-current={tab === t ? 'page' : undefined}>
-              {t}
+    <div className={`app-shell tab-${tab === 'Watch' ? 'watch' : 'page'}`}>
+      <div className="masthead">
+        <header className="topbar">
+          <Brand />
+          <nav aria-label="Main navigation" className="main-nav">
+            {tabs.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => switchTab(t.id)}
+                className={`${tab === t.id ? 'active' : ''} ${t.secondary ? 'secondary' : ''}`}
+                aria-current={tab === t.id ? 'page' : undefined}
+              >
+                {t.label}
+              </button>
+            ))}
+          </nav>
+          <button className="button new-simulation" onClick={() => openSetup()}>
+            Set up a game
+            <ArrowRight size={14} />
+          </button>
+          <button className="icon-button menu-button" aria-label="Menu" aria-haspopup="dialog" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}>
+            <Menu size={22} />
+          </button>
+        </header>
+        <div className="matchbar">
+          <div className="match-identity">
+            <span className="match-name">{match.name}</span>
+            <span className={`mode-label ${match.mode}`}>{MODE_LABEL[match.mode]}</span>
+            <span className="phase-label">
+              <small>{atEdge ? (match.pending ? 'In progress' : 'Latest') : 'Earlier moment'}</small>
+              {phaseName(cp.state.board.name)}
+              <i />
+              {phaseKind(cp.state.board.name)}
+            </span>
+            <span className="created-on">{MODE_HINT[match.mode]}</span>
+          </div>
+          <div className="match-status" data-watch={watch.phase}>
+            <span className={`status-dot ${controlling ? 'live' : ''}`} aria-hidden="true" />
+            <span className="status-text" aria-live="polite">
+              {statusText}
+            </span>
+            <span className="usage">{usageText}</span>
+            <button
+              role="switch"
+              aria-checked={guided}
+              className={`guide-switch ${guided ? 'on' : ''}`}
+              onClick={toggleGuided}
+              aria-label="Guided view"
+            >
+              Guided view <b>{guided ? 'on' : 'off'}</b>
             </button>
-          ))}
-        </nav>
-        <button className="button new-simulation" onClick={() => openSetup()}>
-          Set up a game
-          <ArrowRight size={14} />
-        </button>
-      </header>
-      <div className="matchbar">
-        <div className="match-identity">
-          <span className="match-name">{match.name}</span>
-          <span className={`mode-label ${match.mode}`} title={MODE_HINT[match.mode]}>
-            {MODE_LABEL[match.mode]}
-          </span>
-          <span className="phase-label">
-            <small>{atEdge ? (match.pending ? 'In progress' : 'Latest') : 'Earlier moment'}</small>
-            {phaseName(cp.state.board.name)}
-            <i />
-            {phaseKind(cp.state.board.name)}
-          </span>
-          <span className="created-on">
-            {match.mode === 'sample' ? 'Teaching sample' : `Started ${new Date(match.createdAt).toLocaleDateString()}`}
-          </span>
-        </div>
-        <div className="match-status" data-watch={watch.phase}>
-          <span className={`status-dot ${controlling ? 'live' : ''}`} aria-hidden="true" />
-          <span className="status-text" aria-live="polite">
-            {statusText}
-          </span>
-          <span className="usage" title="Live cost includes reported usage plus conservative reservations for calls still awaiting provider usage.">
-            {usageText}
-          </span>
-          <button
-            role="switch"
-            aria-checked={guided}
-            className={`guide-switch ${guided ? 'on' : ''}`}
-            onClick={() => {
-              const next = !guided;
-              holdWatch('guide');
-              setGuided(next);
-              writeGuided(next);
-              dispatchGuide({ type: 'close' });
-            }}
-            aria-label="Guided view"
-            title="Guided view explains each moment with a card. Turn it off for the full detailed view."
-          >
-            Guided view <b>{guided ? 'on' : 'off'}</b>
-          </button>
-          <button className="icon-button" aria-label="How to watch" onClick={() => openModal('help')}>
-            <CircleHelp size={16} />
-          </button>
+            <button className="icon-button help-button" aria-label="How to watch" onClick={() => openModal('help')}>
+              <CircleHelp size={17} />
+            </button>
+          </div>
         </div>
       </div>
       {errorText && (
@@ -593,52 +698,69 @@ export default function App() {
       {tab === 'Watch' ? (
         <Theater
           match={match}
-          index={index}
-          selected={selected}
+          index={shown}
+          follow={follow}
           focus={focus}
           watching={controlling}
           guided={guided}
           guide={{
-            phase: guidePhase,
+            walkthrough,
             step: guide.step,
-            open: reading && Boolean(guidePhase),
+            open: reading && Boolean(walkthrough),
             pending,
             pendingSeason,
             summaryAction,
             closePauses: watch.phase !== 'idle',
           }}
           actions={guideActions}
-          showOrientation={!introHidden}
+          showWelcome={!welcomeHidden}
           sampleAvailable={sampleAvailable}
           endBusy={busy}
           pausing={watch.phase === 'pausing'}
-          onSelect={setSelected}
+          seenConcepts={seenConcepts}
+          historyNote={historyNoteFor}
+          onConceptSeen={conceptSeen}
+          onFollow={setFollow}
           onLocate={(code) => setFocus((f) => ({ code, nonce: (f?.nonce ?? 0) + 1 }))}
           onDossier={() => openModal('dossier')}
-          onDiplomacy={() => switchTab('Messages')}
-          onLiveEdge={() => seek(match.turns.length)}
-          onSample={() => void openSample()}
-          onSetup={() => openSetup()}
-          onSandbox={() => openSetup('sandbox')}
-          onDismissOrientation={() => {
-            setIntroHidden(true);
-            writeFlag(INTRO_KEY, true);
+          onConversations={(id) => {
+            setInitialThread(id);
+            switchTab('Conversations');
           }}
+          onLiveEdge={() => seek(match.turns.length)}
+          onWelcomeWatch={() => void watchFirstNegotiation()}
+          onWelcomeExplore={dismissWelcome}
+          onSetup={() => openSetup()}
+          onDismissWelcome={dismissWelcome}
           onExtend={(maxPhases) => void extend(maxPhases)}
           onRaiseBudget={(budgetUsd) => void extend(match.limits.maxPhases, budgetUsd)}
           onReplay={() => {
             if (guided) openTurn(0, 0);
             else {
               setIndex(0);
-              follow.current = false;
+              followEdge.current = false;
               setExpertPlaying(true);
             }
           }}
           onBranch={() => openModal('branch')}
+          onWhatIf={openWhatIf}
         />
       ) : (
         <main className="secondary-content">
-          {tab === 'Messages' && <Diplomacy match={match} index={index} />}{' '}
+          {tab === 'Conversations' && (
+            <ConversationsPage
+              key={`${match.id}:${initialThread ?? ''}`}
+              match={match}
+              index={index}
+              follow={follow}
+              initialThread={initialThread}
+              onLocate={locateOnBoard}
+              onOpenMoment={(i) => {
+                seek(i);
+                setTab('Watch');
+              }}
+            />
+          )}
           {tab === 'Timeline' && (
             <Chronicle
               match={match}
@@ -649,10 +771,10 @@ export default function App() {
               }}
             />
           )}
-          {tab === 'Compared with history' && <HistoricalComparison match={match} index={index} />}{' '}
+          {tab === 'Compared with history' && <HistoricalComparison match={match} index={index} />}
           {tab === 'Alternate timeline' &&
             (parent ? (
-              <Comparison match={match} parent={parent} index={index} />
+              <Comparison match={match} parent={parent} index={index} onOpenOriginal={(id, at) => void openGame(id, at)} />
             ) : (
               <Empty>
                 The original game was deleted, so this alternate timeline has nothing to compare against. It keeps its own
@@ -674,7 +796,7 @@ export default function App() {
       )}
       <Playback
         match={match}
-        index={index}
+        index={view}
         guided={guided}
         expertPlaying={expertPlaying}
         speed={speed}
@@ -698,8 +820,20 @@ export default function App() {
               ? 'Free local sandbox · simple policies, not AI-written diplomacy'
               : `${match.usage.calls} model calls · ${match.usage.inputTokens + match.usage.outputTokens} tokens · ${match.usage.unpricedCalls ? 'cost includes reservations awaiting provider usage' : 'provider-reported cost'}`}
         </span>
-        <span>ALTERNATE HISTORY · STANDARD DIPLOMACY · 1901</span>
+        <span>ALTERNATE HISTORY · STANDARD DIPLOMACY · FROM 1901</span>
       </div>
+      {menuOpen && (
+        <MenuSheet
+          tabs={tabs}
+          current={tab}
+          guided={guided}
+          onTab={switchTab}
+          onGuided={toggleGuided}
+          onHelp={() => openModal('help')}
+          onSetup={() => openSetup()}
+          onClose={() => setMenuOpen(false)}
+        />
+      )}
       {modal === 'setup' && (
         <Setup
           key={setupMode ?? 'default'}
@@ -713,29 +847,35 @@ export default function App() {
             setInfo(`“${m.name}” was saved without starting. Open it from History when you want to play it.`);
           }}
         />
-      )}{' '}
+      )}
       {modal === 'branch' && (
         <Branch
           match={match}
-          index={index}
-          selected={selected}
+          index={branchPreset ? branchPreset.at : index}
+          selected={branchPreset ? branchPreset.intervention.power : follow}
           configured={configured}
+          preset={branchPreset}
           onClose={closeModal}
           onCreated={(m) => {
             setModal(null);
+            setBranchPreset(undefined);
             created(m);
           }}
         />
-      )}{' '}
+      )}
       {modal === 'dossier' && (
         <Dossier
           match={match}
           index={index}
-          power={selected}
+          power={follow}
           onClose={closeModal}
           onMoment={(step) => {
             setModal(null);
-            openTurn(index - 1, step);
+            // The dossier names an event of the last resolved phase; open the beat that tells it.
+            const turn = index - 1;
+            const w = deriveWalkthrough(match, turn, { follow });
+            const events = w ? w.beats.map((b, i) => (b.kind === 'event' ? i : -1)).filter((i) => i >= 0) : [];
+            openTurn(turn, events[step] ?? w?.revealAt ?? 0);
           }}
         />
       )}
@@ -743,7 +883,7 @@ export default function App() {
         <Help
           onClose={closeModal}
           onShowIntro={() => {
-            setIntroHidden(false);
+            setWelcomeHidden(false);
             writeFlag(INTRO_KEY, false);
             setModal(null);
             setTab('Watch');

@@ -1,4 +1,5 @@
-import { Check, Download, GitBranch, LoaderCircle, Pause, Play, SkipForward } from 'lucide-react';
+import { useState } from 'react';
+import { Check, ChevronUp, Download, GitBranch, LoaderCircle, Pause, Play, SkipForward } from 'lucide-react';
 import { phaseKind, phaseName } from '../domain';
 import type { Match } from '../types';
 import type { WatchPhase } from '../watch/useWatch';
@@ -6,6 +7,7 @@ import { Select } from './ui/Select';
 
 interface PlaybackProps {
   match: Match;
+  /** The moment on screen (while a guide is open, the board its beat shows). */
   index: number;
   /** Guided view on: recorded replay plays through popups instead of a timer. */
   guided: boolean;
@@ -28,13 +30,17 @@ interface PlaybackProps {
 }
 
 /**
- * The footer has one primary control and one secondary step.
+ * The playback bar: one primary control and one secondary step.
  *
  * - While a game is playing, the primary control pauses it. "Pausing…" lasts until the server is idle.
  * - At the latest phase of an unfinished game of your own, it starts or resumes the watch session.
  * - Everywhere else (the sample, any earlier moment, a finished game) it is a free recorded replay:
  *   guided popups with Guided view on, a timer with it off. A replay never sends a run request.
  * - Looking at the past of an unfinished game, "Resume at latest" is a separate, labelled control.
+ *
+ * On a phone it is a fixed dock at the bottom of the screen (safe-area aware): the moment, the step,
+ * and the primary control are always in reach; the timeline and branching open above it on demand.
+ * While the guide's bottom sheet is open, the sheet takes the dock's place.
  */
 export function Playback({
   match,
@@ -53,6 +59,7 @@ export function Playback({
   onBranch,
   onSpeed,
 }: PlaybackProps) {
+  const [more, setMore] = useState(false);
   const cp = match.checkpoints[index];
   const turn = match.turns[index - 1];
   const atEdge = index === match.turns.length;
@@ -125,23 +132,25 @@ export function Playback({
   }
 
   const showResumeLatest = replay && !sample && !finished && !atEdge;
+  const where =
+    index === 0
+      ? 'Before the first phase'
+      : atEdge
+        ? match.pending
+          ? 'Latest · phase in progress'
+          : finished
+            ? 'Final position'
+            : 'Latest · next phase not played yet'
+        : `Moment ${index} of ${match.turns.length} · recorded`;
+  const paceNote = replay ? 'Recorded phases · no model calls' : live ? 'Live AI countries · each call is billed' : 'Local sandbox · no cost';
 
   return (
-    <footer className="playback-panel">
+    <footer className={`playback ${more ? 'more' : ''}`} aria-label="Playback">
       <div className="recap">
-        <span className="eyebrow">
-          {index === 0
-            ? 'BEFORE THE FIRST PHASE'
-            : atEdge
-              ? match.pending
-                ? 'LATEST · PHASE IN PROGRESS'
-                : finished
-                  ? 'FINAL POSITION'
-                  : 'LATEST · NEXT PHASE NOT PLAYED YET'
-              : `MOMENT ${index} OF ${match.turns.length} · RECORDED`}
-        </span>
+        <span className="recap-where">{where}</span>
         <h2>
-          {phaseName(phase)} · {phaseKind(phase)}
+          {phaseName(phase)}
+          {phase !== 'COMPLETED' && <span> · {phaseKind(phase)}</span>}
         </h2>
         <p>
           {turn
@@ -150,94 +159,90 @@ export function Playback({
         </p>
       </div>
       <div className="playback-controls">
-        <button className="play-button" onClick={onPrimary} aria-label={primaryAria} title={primaryAria} disabled={primaryDisabled}>
+        <button className={`play-button ${controlling ? 'live' : ''}`} onClick={onPrimary} aria-label={primaryAria} disabled={primaryDisabled}>
           {primaryIcon === 'spin' ? (
-            <LoaderCircle size={18} className="spin" />
+            <LoaderCircle size={18} className="spin" aria-hidden="true" />
           ) : primaryIcon === 'pause' ? (
-            <Pause size={18} fill="currentColor" />
+            <Pause size={17} fill="currentColor" aria-hidden="true" />
           ) : (
-            <Play size={18} fill="currentColor" />
+            <Play size={17} fill="currentColor" aria-hidden="true" />
           )}
           <span>{primaryLabel}</span>
         </button>
-        <button className="step-button" aria-label={stepAria} title={stepAria} disabled={stepDisabled} onClick={onStep}>
-          <SkipForward size={17} />
+        <button className="step-button" aria-label={stepAria} disabled={stepDisabled} onClick={onStep}>
+          <SkipForward size={17} aria-hidden="true" />
           <span>{stepLabel}</span>
         </button>
-        {showResumeLatest && (
-          <button
-            className="step-button resume-latest"
-            onClick={onResumeLatest}
-            disabled={busy}
-            aria-label={live ? 'Resume at latest: go to the latest phase and keep playing (billed model calls)' : 'Resume at latest: go to the latest phase and keep playing (free sandbox)'}
-          >
-            <SkipForward size={17} />
-            <span>{live ? 'Resume at latest · billed' : 'Resume at latest (free)'}</span>
-          </button>
-        )}
-        {replay && !guided && hasRecord && (
-          <Select
-            aria-label="Replay speed"
-            className="speed-select"
-            value={speed}
-            options={[0.5, 1, 2, 4].map((s) => ({ value: s, label: `${s}×` }))}
-            onChange={onSpeed}
-          />
-        )}
-        <small className="pace-note">
-          {replay
-            ? 'Recorded phases · no model calls'
-            : live
-              ? 'Phases play one at a time · AI calls are billed'
-              : 'Local policies · no cost'}
-        </small>
-      </div>
-      <div className="timeline">
-        <div className="timeline-track">
-          <span style={{ width: `${(index / Math.max(match.turns.length, 1)) * 100}%` }} />
-          {match.checkpoints.map((c, i) => (
-            <button
-              key={i}
-              className={`${i <= index ? 'past' : ''} ${i === index ? 'current' : ''}`}
-              style={{ left: `${(i / Math.max(match.turns.length, 1)) * 100}%` }}
-              onClick={() => onSeek(i)}
-              aria-label={`Seek moment ${i}: before ${phaseName(c.state.board.name)}`}
-              title={`Moment ${i} · before ${phaseName(c.state.board.name)} · ${phaseKind(c.state.board.name)}`}
-            />
-          ))}
-        </div>
-        <div className="timeline-labels">
-          <span>
-            Start
-            <small>Before {phaseName(match.checkpoints[0].state.board.name)}</small>
-          </span>
-          <span>
-            Moment {index} of {match.turns.length}
-            <small>
-              {atEdge ? 'Latest' : 'Earlier in the record'} · {phaseName(phase)}
-            </small>
-          </span>
-        </div>
-      </div>
-      <div className="branch-actions">
-        <button className="button" disabled={cp.state.done || controlling || busy} onClick={onBranch}>
-          <GitBranch size={16} />
-          Try a different decision
+        <button className="dock-more" aria-expanded={more} aria-controls="playback-more" aria-label="Timeline and more playback options" onClick={() => setMore((m) => !m)}>
+          <ChevronUp size={18} aria-hidden="true" />
         </button>
-        <div>
-          <Check size={12} />
-          <span>Saved on this device</span>
-          <button
-            className="icon-button"
-            title="Download the recorded game as JSON"
-            aria-label="Export complete replay"
-            disabled={controlling || busy}
-            onClick={() => {
-              window.location.href = `/api/matches/${match.id}/export`;
-            }}
-          >
-            <Download size={14} />
+      </div>
+      <div className="playback-more" id="playback-more">
+        <div className="timeline">
+          <div className="timeline-track">
+            <span style={{ width: `${(index / Math.max(match.turns.length, 1)) * 100}%` }} />
+            {match.checkpoints.map((c, i) => (
+              <button
+                key={i}
+                className={`${i <= index ? 'past' : ''} ${i === index ? 'current' : ''}`}
+                style={{ left: `${(i / Math.max(match.turns.length, 1)) * 100}%` }}
+                onClick={() => onSeek(i)}
+                aria-label={`Seek moment ${i}: before ${phaseName(c.state.board.name)}`}
+              />
+            ))}
+          </div>
+          <div className="timeline-labels">
+            <span>
+              Start
+              <small>Before {phaseName(match.checkpoints[0].state.board.name)}</small>
+            </span>
+            <span>
+              Moment {index} of {match.turns.length}
+              <small>
+                {atEdge ? 'Latest' : 'Earlier in the record'} · {phaseName(phase)}
+              </small>
+            </span>
+          </div>
+        </div>
+        <div className="playback-extras">
+          {showResumeLatest && (
+            <button
+              className="step-button resume-latest"
+              onClick={onResumeLatest}
+              disabled={busy}
+              aria-label={live ? 'Resume at latest: go to the latest phase and keep playing (billed model calls)' : 'Resume at latest: go to the latest phase and keep playing (free sandbox)'}
+            >
+              <SkipForward size={16} aria-hidden="true" />
+              <span>{live ? 'Resume at latest · billed' : 'Resume at latest (free)'}</span>
+            </button>
+          )}
+          {replay && !guided && hasRecord && (
+            <Select
+              aria-label="Replay speed"
+              className="speed-select"
+              value={speed}
+              options={[0.5, 1, 2, 4].map((s) => ({ value: s, label: `${s}×` }))}
+              onChange={onSpeed}
+            />
+          )}
+          <button className="button branch-button" disabled={cp.state.done || controlling || busy} onClick={onBranch}>
+            <GitBranch size={15} aria-hidden="true" />
+            Try a different decision
           </button>
+          <span className="saved-note">
+            <Check size={12} aria-hidden="true" /> Saved on this device
+            <button
+              className="icon-button"
+              aria-label="Export complete replay"
+              disabled={controlling || busy}
+              onClick={() => {
+                window.location.href = `/api/matches/${match.id}/export`;
+              }}
+            >
+              <Download size={15} aria-hidden="true" />
+            </button>
+          </span>
+          <small className="pace-note">{paceNote}</small>
         </div>
       </div>
     </footer>
