@@ -71,23 +71,23 @@ export function Playback({
     }
   } else if (pauseRequested) {
     primaryLabel = 'Pausing…';
-    primaryAria = 'Pausing: the current phase finishes its model calls first';
+    primaryAria = 'Pausing. The current phase finishes its model calls first';
     primaryDisabled = true;
   } else if (watching || match.status === 'running') {
     primaryLabel = 'Pause game';
-    primaryAria = 'Pause the game. The phase in progress finishes its current model calls, and nothing new is requested.';
+    primaryAria = 'Pause game. The phase in progress finishes its current model calls, and nothing new is requested.';
   } else if (finished) {
     primaryLabel = 'Game over';
-    primaryAria = 'The game is over. See the result in the panel above.';
+    primaryAria = 'Game over. See the result in the panel above.';
     primaryDisabled = true;
   } else if (turn === undefined && atEdge) {
     primaryLabel = live ? 'Play first phase' : 'Play first phase (free)';
-    primaryAria = live ? 'Play the first phase with AI countries until you pause' : 'Play the first phase in the sandbox until you pause';
+    primaryAria = live ? 'Play first phase. AI countries play until you pause' : 'Play first phase (free). The sandbox plays until you pause';
   } else {
     primaryLabel = 'Resume game';
     primaryAria = atEdge
-      ? 'Resume the game from the latest phase until you pause'
-      : 'Jump to the latest phase and resume the game';
+      ? 'Resume game from the latest phase until you pause'
+      : 'Resume game: jump to the latest phase and keep playing';
   }
 
   let stepLabel = 'Next moment';
@@ -101,8 +101,8 @@ export function Playback({
     } else if (atEdge) {
       stepLabel = live ? 'Play next phase' : 'Play next phase (free)';
       stepAria = live
-        ? 'Play one phase with AI countries (billed model calls), then stop'
-        : 'Play one sandbox phase, then stop';
+        ? 'Play next phase: one phase with AI countries (billed model calls), then stop'
+        : 'Play next phase (free): one sandbox phase, then stop';
     }
   } else if (atEdge) {
     stepDisabled = true;

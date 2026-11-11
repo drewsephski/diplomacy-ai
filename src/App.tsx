@@ -276,7 +276,7 @@ export default function App() {
     currentId.current = m.id;
     setMatch(m);
     setIndex(m.turns.length);
-    setTab('Watch');
+    setTab(m.parent ? 'Alternate timeline' : 'Watch');
     setParent(undefined);
     follow.current = true;
     dispatchGuide({ type: 'reset', resolved: m.turns.length });
